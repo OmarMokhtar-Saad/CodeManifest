@@ -89,8 +89,13 @@ The script automatically:
 # Check what changed
 git diff
 
-# Run your tests
-# (your test command here)
+# [TODO - replace with your project's test command]
+# Python:     pytest
+# Node.js:    npm test
+# Java/Maven: mvn test
+# Java/Gradle: ./gradlew test
+# Go:         go test ./...
+# Ruby:       bundle exec rspec
 ```
 
 ### Step 5: Report

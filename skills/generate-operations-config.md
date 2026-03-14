@@ -124,19 +124,36 @@ Edit an existing file using find-replace patterns.
 
 ## Protected Files (Cannot Be Deleted)
 
+Default list (already enforced by `validate-config-json.py`):
 ```
-.gitignore
-*.md  (README, docs, etc.)
-Makefile
-Dockerfile
-docker-compose.yml
-requirements.txt
-package.json
-pyproject.toml
-setup.py
+.gitignore, *.md, Makefile, Dockerfile, docker-compose.yml
+requirements.txt, package.json, pyproject.toml, setup.py
 ```
 
-Customize this list in `validate-config-json.py` for your project.
+**[TODO - customize for your project]**
+Open `scripts/validate-config-json.py` and add your critical files to `PROTECTED_PATTERNS`:
+
+```python
+# Examples by project type:
+
+# Node.js
+"package-lock.json", "yarn.lock", "tsconfig.json", "webpack.config.js"
+
+# Python
+"Pipfile", "Pipfile.lock", "setup.cfg", "tox.ini"
+
+# Java/Gradle
+"build.gradle", "build.gradle.kts", "settings.gradle.kts", "gradlew"
+
+# Java/Maven
+"pom.xml"
+
+# iOS/macOS
+"*.xcodeproj", "Podfile", "Podfile.lock"
+
+# CI/CD
+".github/workflows/*.yml", ".gitlab-ci.yml", "Jenkinsfile"
+```
 
 ---
 
