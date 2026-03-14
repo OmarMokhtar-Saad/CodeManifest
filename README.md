@@ -89,8 +89,8 @@ The execution phase (Python running the script) costs 0 tokens.
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/ai-ops-config.git
-cd ai-ops-config
+git clone https://github.com/YOUR_USERNAME/codemanifest.git
+cd codemanifest
 
 # Optional: enable JSON schema validation
 pip3 install jsonschema
@@ -405,7 +405,7 @@ python3 scripts/validate-config-json.py examples/01-simple-edit.json
 ## Project Structure
 
 ```
-ai-ops-config/
+codemanifest/
 ├── scripts/
 │   ├── validate-config-json.py    24-guard pre-flight validator
 │   ├── execute-json-ops.py        Safe executor with auto-backup + manifest

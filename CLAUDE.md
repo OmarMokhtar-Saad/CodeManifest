@@ -1,4 +1,4 @@
-# ai-ops-config
+# codemanifest
 
 Python scripts and AI skills for the Operations Config Pattern —
 cutting AI token costs 77-92% by separating planning (AI) from execution (Python).

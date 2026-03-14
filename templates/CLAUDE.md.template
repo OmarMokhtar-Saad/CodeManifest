@@ -65,7 +65,7 @@ If using Claude Code, register these skills in `.claude/skills/`:
 | Plan review | `validate-operations-config.md` | AI validates ops.json |
 | Plan execution | `execute-operations-config.md` | AI runs executor script |
 
-Skills are in `skills/` in the ai-ops-config repo.
+Skills are in `skills/` in the codemanifest repo.
 Copy them to `.claude/skills/<name>/SKILL.md` and register in `skills-registry.json`.
 
 ### Folder Structure
