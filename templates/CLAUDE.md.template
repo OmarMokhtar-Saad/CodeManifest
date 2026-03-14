@@ -3,7 +3,7 @@
 ## AI-Assisted Code Changes
 
 All implementation plans require an `ops.json` config file.
-Plans without ops.json are rejected.
+Plans without ops.json are rejected. No exceptions.
 
 ### Workflow
 
@@ -12,10 +12,16 @@ Plans without ops.json are rejected.
 3. Execute:  `python scripts/execute-json-ops.py path/to/ops.json`
 4. Restore:  `python scripts/restore-backup.py --backup backups/<backup-dir>`
 
-### ops.json Format
+### AI Role (MANDATORY)
 
-The AI must produce a JSON config describing exact code changes.
-It must NOT write code directly.
+When asked to make any code change:
+1. Read every target file first
+2. Produce `ops.json` describing the exact changes
+3. Stop — do NOT write code directly
+
+Follow the `generate-operations-config` skill for the full format reference.
+
+### ops.json Format
 
 ```json
 {
@@ -43,19 +49,33 @@ It must NOT write code directly.
 
 ### Constraints
 
-- Maximum 5 operations per config
+- Maximum 5 operations per config (split into parts if more)
 - Maximum 3 file deletions per config
-- `find` pattern must be unique in the file (unambiguous match)
+- `find` pattern must appear exactly once in the file
+- No extra fields — schema uses `additionalProperties: false`
 - Protected files cannot be deleted (*.md, .gitignore, package.json, etc.)
+
+### Skills (Claude Code)
+
+If using Claude Code, register these skills in `.claude/skills/`:
+
+| Trigger | Skill File | Purpose |
+|---|---|---|
+| Any code change request | `generate-operations-config.md` | AI produces ops.json |
+| Plan review | `validate-operations-config.md` | AI validates ops.json |
+| Plan execution | `execute-operations-config.md` | AI runs executor script |
+
+Skills are in `skills/` in the ai-ops-config repo.
+Copy them to `.claude/skills/<name>/SKILL.md` and register in `skills-registry.json`.
 
 ### Folder Structure
 
 ```
 operations/
   <plan-name>/
-    ops.json
+    ops.json         (or part1-ops.json, part2-ops.json for large plans)
 backups/
   <plan-name>-<timestamp>/
     manifest.json
-    <backed-up-files>
+    <backed-up files>
 ```
