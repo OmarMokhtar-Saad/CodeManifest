@@ -1,0 +1,23 @@
+{
+  "plan": "multi-file-edit-example",
+  "files": [
+    {
+      "path": "examples/sample/app.py",
+      "edits": [
+        {
+          "find": "return \"Hello, \" + name",
+          "replace": "return f\"Hello, {name}!\""
+        }
+      ]
+    },
+    {
+      "path": "examples/sample/config.json",
+      "edits": [
+        {
+          "find": "\"debug\": false",
+          "replace": "\"debug\": true"
+        }
+      ]
+    }
+  ]
+}

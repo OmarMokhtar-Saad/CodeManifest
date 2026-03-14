@@ -1,0 +1,14 @@
+{
+  "plan": "simple-edit-example",
+  "files": [
+    {
+      "path": "examples/sample/app.py",
+      "edits": [
+        {
+          "find": "VERSION = \"1.0.0\"",
+          "replace": "VERSION = \"1.1.0\""
+        }
+      ]
+    }
+  ]
+}

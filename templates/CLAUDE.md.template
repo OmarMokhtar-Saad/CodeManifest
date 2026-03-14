@@ -1,0 +1,61 @@
+# Your Project Name
+
+## AI-Assisted Code Changes
+
+All implementation plans require an `ops.json` config file.
+Plans without ops.json are rejected.
+
+### Workflow
+
+1. Validate: `python scripts/validate-config-json.py path/to/ops.json`
+2. Dry run:  `python scripts/execute-json-ops.py path/to/ops.json --dry-run`
+3. Execute:  `python scripts/execute-json-ops.py path/to/ops.json`
+4. Restore:  `python scripts/restore-backup.py --backup backups/<backup-dir>`
+
+### ops.json Format
+
+The AI must produce a JSON config describing exact code changes.
+It must NOT write code directly.
+
+```json
+{
+  "plan": "plan-name-in-kebab-case",
+  "operations": [
+    {
+      "type": "code_edit",
+      "path": "relative/path/to/file.py",
+      "edits": [
+        {
+          "find": "exact text to find",
+          "replace": "replacement text"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Operation Types
+
+- `code_edit` — edit existing file (find + replace/add_after/add_before/delete)
+- `file_create` — create new file with content
+- `file_delete` — delete file (requires `reason` field, min 10 chars)
+
+### Constraints
+
+- Maximum 5 operations per config
+- Maximum 3 file deletions per config
+- `find` pattern must be unique in the file (unambiguous match)
+- Protected files cannot be deleted (*.md, .gitignore, package.json, etc.)
+
+### Folder Structure
+
+```
+operations/
+  <plan-name>/
+    ops.json
+backups/
+  <plan-name>-<timestamp>/
+    manifest.json
+    <backed-up-files>
+```

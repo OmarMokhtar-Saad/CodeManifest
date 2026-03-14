@@ -1,0 +1,15 @@
+{
+  "plan": "file-operations-example",
+  "operations": [
+    {
+      "type": "file_create",
+      "path": "examples/sample/new-util.py",
+      "content": "def new_function():\n    \"\"\"Replacement for old_function.\"\"\"\n    return True\n"
+    },
+    {
+      "type": "file_delete",
+      "path": "examples/sample/old-util.py",
+      "reason": "Replaced by new-util.py with improved implementation"
+    }
+  ]
+}
