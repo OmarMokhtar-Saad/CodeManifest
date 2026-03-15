@@ -149,10 +149,10 @@ def execute_file_delete(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
         return True, "already-deleted"
 
     try:
-        rel_path = os.path.relpath(file_path)
+        rel_path = Path(os.path.relpath(file_path))
         backup_path = backup_dir / rel_path
         backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(file_path, backup_path)
+        shutil.copy(str(file_path), str(backup_path))
         print(f"  Backed up to: {backup_path}")
 
         file_size = file_path.stat().st_size
@@ -178,10 +178,10 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
 
     # Backup original (preserve directory structure)
     if not dry_run:
-        rel_path = os.path.relpath(file_path)
+        rel_path = Path(os.path.relpath(file_path))
         backup_path = backup_dir / rel_path
         backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(file_path, backup_path)
+        shutil.copy(str(file_path), str(backup_path))
         print(f"  Backed up to: {backup_path}")
 
     try:
@@ -287,7 +287,7 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
     # Create backup directory (sanitize plan name for safe filesystem path)
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     safe_plan_name = re.sub(r'[^a-zA-Z0-9_-]', '_', plan_name)
-    backup_dir = Path(f"backups/{safe_plan_name}-{timestamp}")
+    backup_dir = Path("backups") / f"{safe_plan_name}-{timestamp}"
 
     if not dry_run:
         backup_dir.mkdir(parents=True, exist_ok=True)

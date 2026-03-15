@@ -26,22 +26,22 @@ jobs:
           pip install pytest coverage jsonschema
 
       - name: Validate example 01
-        run: python scripts/validate-config-json.py examples/01-simple-edit.json
+        run: python3 scripts/validate-config-json.py examples/01-simple-edit.json
 
       - name: Validate example 02
-        run: python scripts/validate-config-json.py examples/02-multi-file-edit.json
+        run: python3 scripts/validate-config-json.py examples/02-multi-file-edit.json
 
       - name: Validate example 03
-        run: python scripts/validate-config-json.py examples/03-file-operations.json
+        run: python3 scripts/validate-config-json.py examples/03-file-operations.json
 
       - name: Dry-run example 01
-        run: python scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
+        run: python3 scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
 
       - name: Dry-run example 02
-        run: python scripts/execute-json-ops.py examples/02-multi-file-edit.json --dry-run
+        run: python3 scripts/execute-json-ops.py examples/02-multi-file-edit.json --dry-run
 
       - name: Dry-run example 03
-        run: python scripts/execute-json-ops.py examples/03-file-operations.json --dry-run
+        run: python3 scripts/execute-json-ops.py examples/03-file-operations.json --dry-run
 
       - name: Run tests with coverage
         run: coverage run -m pytest tests/ -v

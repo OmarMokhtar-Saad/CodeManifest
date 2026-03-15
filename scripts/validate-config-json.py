@@ -576,8 +576,8 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
         try:
             rel_path = os.path.relpath(file_path)
             parent = os.path.dirname(rel_path)
-            if parent and '/' in parent:
-                components = parent.split('/')
+            if parent and os.sep in parent:
+                components = parent.split(os.sep)
                 for component in components:
                     if not component or component in ['.', '..']:
                         errors.append(
