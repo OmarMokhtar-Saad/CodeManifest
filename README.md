@@ -294,53 +294,44 @@ python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
 
 ---
 
-## Making the AI Generate ops.json Automatically
+## Integration Guide
 
-By default, you need to manually ask the AI to produce ops.json.
-The skills in `skills/` eliminate that — they teach the AI its role once, so it applies the pattern automatically on every request.
+### What you're copying
 
-### What a skill is
+| What | Where it goes | Purpose |
+|---|---|---|
+| `scripts/` | `your-project/scripts/` | The 3 Python scripts + JSON schema (required) |
+| `.claude/skills/` | `your-project/.claude/skills/` | Slash commands for Claude Code (optional) |
+| `templates/CLAUDE.md.template` | `your-project/CLAUDE.md` | Project instructions for the AI (recommended) |
 
-A skill is a markdown file that gives the AI a precise role and decision tree.
-The AI reads it before responding, then follows it exactly.
+The **scripts** are the core — they work standalone with any AI or no AI at all.
+The **skills** and **CLAUDE.md** teach the AI to use the scripts automatically.
 
-```
-skills/
-├── generate-operations-config.md   # AI produces ops.json, does NOT write code
-├── validate-operations-config.md   # AI reviews ops.json before execution
-└── execute-operations-config.md    # AI runs the executor script
-```
+---
 
-### Claude Code setup
+### Claude Code
 
-**Step 1:** Copy the scripts and skills into your project:
+**Setup (3 minutes):**
 
 ```bash
-# Copy scripts
+# From inside the CodeManifest repo:
 cp -r scripts/ your-project/scripts/
-
-# Copy the pre-configured .claude/skills/ directory
 cp -r .claude/ your-project/.claude/
-```
-
-This gives you three slash commands that Claude Code recognizes automatically:
-
-| Slash command | What it does |
-|---|---|
-| `/generate-ops <task>` | AI reads files and creates `ops.json` (never writes code directly) |
-| `/validate-ops <path>` | Runs the validator script + dry-run, reports APPROVED/REJECTED |
-| `/execute-ops <path>` | Runs dry-run, then real execution, then verifies with tests |
-
-Each skill prints `[SKILL: name]` tags so you can verify it was invoked.
-
-**Step 2:** Add a `CLAUDE.md` to your project:
-
-```bash
 cp templates/CLAUDE.md.template your-project/CLAUDE.md
-# Edit: fill in your project name and test command
+# Edit CLAUDE.md: fill in your project name and test command
 ```
 
-**Step 3:** Use it:
+**What you get — 3 slash commands:**
+
+| Command | What it does |
+|---|---|
+| `/generate-ops <task>` | AI reads target files, creates `operations/{plan}/ops.json` |
+| `/validate-ops <path>` | Runs `validate-config-json.py` + dry-run, reports APPROVED/REJECTED |
+| `/execute-ops <path>` | Runs dry-run, real execution, verifies with tests |
+
+Each prints `[SKILL: name]` tags so you can verify the skill was invoked.
+
+**How to use:**
 
 ```
 You: "Add logging to src/app.py"
@@ -351,47 +342,200 @@ Claude automatically:
 3. /execute-ops → dry-run, execute, verify with tests
 ```
 
-### Other LLMs (GPT-4, Gemini, Cursor, Copilot)
+Or invoke each step manually: type `/generate-ops` in Claude Code's prompt.
 
-Paste the skill content into your system prompt or instruction file.
-The concepts are identical — only the invocation mechanism differs.
+---
 
+### Cursor
+
+**Setup:**
+
+```bash
+cp -r scripts/ your-project/scripts/
 ```
-System prompt addition:
-"When asked to implement any code change, follow this workflow:
- 1. Read every target file first.
- 2. Produce ops.json describing the exact changes (MODERN format with operations/type).
- 3. Stop. Do NOT write code directly.
- [paste contents of .claude/skills/generate-operations-config/SKILL.md here]"
+
+Create `.cursor/rules/ops-config.mdc` in your project:
+
+```markdown
+---
+description: Use ops.json pattern for all code changes
+globs: **/*
+alwaysApply: true
+---
+
+When asked to make ANY code change:
+
+1. Read every target file first
+2. Create an ops.json file with this format:
+   {
+     "plan": "plan-name",
+     "operations": [
+       {"type": "code_edit", "path": "file.py", "edits": [{"find": "exact text", "replace": "new text"}]}
+     ]
+   }
+3. Run: python3 scripts/validate-config-json.py ops.json
+4. Run: python3 scripts/execute-json-ops.py ops.json --dry-run
+5. Run: python3 scripts/execute-json-ops.py ops.json
+
+Do NOT edit files directly. Always use ops.json.
 ```
 
 ---
 
-## Adopting in Your Project
+### GitHub Copilot
 
-**4 steps, under 5 minutes:**
+**Setup:**
 
 ```bash
-# Step 1: Copy scripts + skills into your project
 cp -r scripts/ your-project/scripts/
-cp -r .claude/ your-project/.claude/
+```
 
-# Step 2: Set up CLAUDE.md
-cp templates/CLAUDE.md.template your-project/CLAUDE.md
-# Edit: fill in your project name and test command
+Create `.github/copilot-instructions.md` in your project:
 
-# Step 3: (Optional) Add your stack's protected files
-# Open scripts/validate-config-json.py → find PROTECTED_PATTERNS
+```markdown
+## Code Change Instructions
+
+All code changes must use the ops.json pattern. Do not edit files directly.
+
+Workflow:
+1. Read every target file first
+2. Produce an ops.json describing changes in this format:
+   - "plan": plan name
+   - "operations": array of {"type": "code_edit"/"file_create"/"file_delete", "path": "...", ...}
+   - For edits: {"find": "exact text from file", "replace": "new text"}
+3. Run: python3 scripts/validate-config-json.py <ops.json>
+4. Run: python3 scripts/execute-json-ops.py <ops.json> --dry-run
+5. Run: python3 scripts/execute-json-ops.py <ops.json>
+
+Rules:
+- find pattern must match EXACTLY (copy from file, don't guess)
+- find pattern must appear exactly once in the file
+- Max 5 operations per config
+- Use \n for newlines in JSON strings
+```
+
+---
+
+### ChatGPT / GPT-4 / GPT-4o
+
+**Setup:** Copy `scripts/` into your project. Then add this to your **Custom Instructions** or **System Prompt**:
+
+```
+You are a code change planner. When asked to implement changes:
+
+1. Ask the user to paste the contents of each target file
+2. Produce an ops.json file describing the exact changes:
+   {
+     "plan": "plan-name",
+     "operations": [
+       {
+         "type": "code_edit",
+         "path": "relative/path/to/file",
+         "edits": [{"find": "exact text from file", "replace": "new text"}]
+       }
+     ]
+   }
+3. Tell the user to run:
+   python3 scripts/validate-config-json.py ops.json
+   python3 scripts/execute-json-ops.py ops.json --dry-run
+   python3 scripts/execute-json-ops.py ops.json
+
+Rules:
+- "find" must be copied EXACTLY from the file (preserve whitespace)
+- "find" must appear exactly once in the file
+- Use \n for newlines, \t for tabs in JSON strings
+- Max 5 operations per config
+- For file creation: {"type": "file_create", "path": "...", "content": "..."}
+- For file deletion: {"type": "file_delete", "path": "...", "reason": "min 10 chars"}
+```
+
+**Note:** ChatGPT can't run the scripts — it produces the ops.json, you run the scripts locally.
+
+---
+
+### Google Gemini
+
+**Setup:** Same as ChatGPT. Add the same instructions to your Gemini system prompt or Google AI Studio instructions. Gemini produces ops.json, you run the scripts locally.
+
+---
+
+### Windsurf / Aider / Other AI coding tools
+
+**Setup:**
+
+```bash
+cp -r scripts/ your-project/scripts/
+```
+
+Create a `.ai-instructions` or equivalent config file with:
+
+```
+All code changes use the ops.json pattern.
+Do NOT edit files directly. Produce ops.json instead.
+
+Format:
+{"plan": "name", "operations": [{"type": "code_edit", "path": "file", "edits": [{"find": "exact", "replace": "new"}]}]}
+
+After creating ops.json, run:
+python3 scripts/validate-config-json.py ops.json
+python3 scripts/execute-json-ops.py ops.json
+```
+
+The instruction file name varies by tool — check your tool's docs for where to put system instructions.
+
+---
+
+### No AI — manual usage
+
+The scripts work without any AI. Write ops.json by hand:
+
+```bash
+# 1. Create ops.json manually
+cat > ops.json << 'EOF'
+{
+  "plan": "my-change",
+  "operations": [
+    {
+      "type": "code_edit",
+      "path": "src/app.py",
+      "edits": [{"find": "old_value = 1", "replace": "old_value = 2"}]
+    }
+  ]
+}
+EOF
+
+# 2. Validate
+python3 scripts/validate-config-json.py ops.json
+
+# 3. Execute
+python3 scripts/execute-json-ops.py ops.json --dry-run
+python3 scripts/execute-json-ops.py ops.json
+```
+
+---
+
+## Adopting in Your Project — Summary
+
+| Your AI tool | What to copy | What to configure |
+|---|---|---|
+| **Claude Code** | `scripts/` + `.claude/` + `CLAUDE.md` | Edit CLAUDE.md with project name and test command |
+| **Cursor** | `scripts/` | Create `.cursor/rules/ops-config.mdc` |
+| **GitHub Copilot** | `scripts/` | Create `.github/copilot-instructions.md` |
+| **ChatGPT / GPT-4** | `scripts/` | Add to Custom Instructions or system prompt |
+| **Gemini** | `scripts/` | Add to system instructions |
+| **Other AI tools** | `scripts/` | Add to your tool's instruction file |
+| **No AI** | `scripts/` | Nothing — write ops.json manually |
+
+**Optional for all:** Add protected files for your stack in `scripts/validate-config-json.py` → `PROTECTED_PATTERNS`:
+
+```python
 # Already included: .gitignore, *.md, Makefile, Dockerfile, requirements.txt,
 #   package.json, package-lock.json, yarn.lock, pyproject.toml, setup.py,
 #   setup.cfg, Pipfile, Pipfile.lock, tsconfig.json
-# Add more for your stack:
-#   Java/Gradle: "build.gradle.kts", "settings.gradle.kts", "gradlew"
-#   iOS:         "Podfile", "Podfile.lock"
-#   CI/CD:       ".github/workflows/*.yml"
-
-# Step 4: Test it — ask Claude to make a small change
-# Claude will use /generate-ops, /validate-ops, /execute-ops automatically
+# Add for your stack:
+#   Java:  "build.gradle.kts", "settings.gradle.kts", "gradlew", "pom.xml"
+#   iOS:   "Podfile", "Podfile.lock"
+#   CI/CD: ".github/workflows/*.yml", ".gitlab-ci.yml"
 ```
 
 ---
