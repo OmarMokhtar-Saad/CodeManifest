@@ -3,7 +3,7 @@
 restore-backup.py - Restore files from backup
 
 Purpose: Restore files from a previous backup (manual recovery)
-Usage: python scripts/restore-backup.py --backup backups/<backup_dir> [--force]
+Usage: python3 scripts/restore-backup.py --backup backups/<backup_dir> [--force] [--dry-run]
 
 Safety Guards (10 total):
   GUARD 1:  Backup directory existence
@@ -25,13 +25,14 @@ import shutil
 import sys
 
 
-def restore_from_backup(backup_dir, force=False):
+def restore_from_backup(backup_dir, force=False, dry_run=False):
     """
     Restore all files from backup directory.
 
     Args:
         backup_dir: Path to backup directory
         force: Skip user confirmation if True
+        dry_run: Preview what would be restored without touching files
 
     Returns:
         True if successful
@@ -78,8 +79,29 @@ def restore_from_backup(backup_dir, force=False):
             print("Warning: Backup contains no files to restore")
             return True
 
-        print(f"Restoring from: {backup_dir}")
+        print(f"{'[DRY RUN] ' if dry_run else ''}Restoring from: {backup_dir}")
         print(f"Timestamp: {manifest.get('timestamp', 'unknown')}\n")
+
+        if dry_run:
+            print("DRY RUN MODE - No files will be changed\n")
+            if files_to_restore:
+                print(f"Would restore ({len(files_to_restore)}):")
+                for fp in files_to_restore:
+                    rel_path = os.path.relpath(fp)
+                    backup_path = os.path.join(backup_dir, rel_path)
+                    exists = "exists" if os.path.exists(backup_path) else "MISSING in backup"
+                    print(f"  - {fp}  [{exists}]")
+                print()
+            if created_files:
+                print(f"Would remove ({len(created_files)}):")
+                for fp in created_files:
+                    status = "exists" if os.path.exists(fp) else "already gone"
+                    print(f"  - {fp}  [{status}]")
+                print()
+            print("-" * 40)
+            print("DRY RUN COMPLETE - no changes made")
+            print("-" * 40)
+            return True
 
         # GUARD 5: User confirmation
         if not force:
@@ -237,18 +259,22 @@ def main():
         epilog="""
 Examples:
   # List available backups
-  python scripts/restore-backup.py --list
+  python3 scripts/restore-backup.py --list
+
+  # Preview what would be restored (no files touched)
+  python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000 --dry-run
 
   # Restore from specific backup (with confirmation prompt)
-  python scripts/restore-backup.py --backup backups/my-plan-20240101-120000
+  python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000
 
   # Restore without confirmation
-  python scripts/restore-backup.py --backup backups/my-plan-20240101-120000 --force
+  python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000 --force
         """
     )
 
     parser.add_argument('--backup', help='Path to backup directory to restore from')
     parser.add_argument('--force', action='store_true', help='Skip confirmation prompt')
+    parser.add_argument('--dry-run', action='store_true', help='Preview what would be restored without touching files')
     parser.add_argument('--list', action='store_true', help='List available backups')
     parser.add_argument('--backup-dir', default='backups', help='Base backup directory (default: backups)')
 
@@ -283,7 +309,7 @@ Examples:
         parser.print_help()
         sys.exit(1)
 
-    success = restore_from_backup(args.backup, force=args.force)
+    success = restore_from_backup(args.backup, force=args.force, dry_run=args.dry_run)
     sys.exit(0 if success else 1)
 
 

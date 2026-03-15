@@ -3,7 +3,7 @@
 validate-config-json.py - Validate JSON operations config (v2.0)
 
 Purpose: Check JSON operations config for errors before execution
-Usage: python scripts/validate-config-json.py path/to/ops.json
+Usage: python3 scripts/validate-config-json.py path/to/ops.json
 
 Supports Two Formats:
   - LEGACY: {"plan": "...", "files": [...]} - Code edits only
@@ -18,6 +18,7 @@ Validation Guards: 24 total
 import argparse
 import json
 import os
+import re
 import sys
 import fnmatch
 from pathlib import Path
@@ -395,8 +396,8 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
     Guards:
     - GUARD 19: Backup path format consistency
     - GUARD 20: Manifest path reconstruction testability
-    - GUARD 21: (reserved)
-    - GUARD 22: (reserved)
+    - GUARD 21: Plan name safe for filesystem paths
+    - GUARD 22: Backup directory parent is writable
     - GUARD 23: File naming collision detection
     - GUARD 24: Nested directory path handling
     """
@@ -446,6 +447,35 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
         except Exception as e:
             errors.append(f"GUARD 20 FAILED: Path reconstruction failed: {file_path} ({e})")
 
+    # GUARD 21: Plan name safe for filesystem paths
+    plan_name = config.get('plan', '')
+    if plan_name:
+        unsafe_chars = re.findall(r'[^a-zA-Z0-9_\-]', plan_name)
+        if unsafe_chars:
+            unique_chars = list(dict.fromkeys(unsafe_chars))
+            errors.append(
+                f"GUARD 21 WARNING: Plan name contains characters that will be sanitized in backup path: "
+                f"{repr(plan_name)}\n"
+                f"                  Unsafe chars: {unique_chars}\n"
+                f"                  FIX: Use only letters, digits, hyphens, underscores in plan name"
+            )
+
+    # GUARD 22: Backup directory parent is writable
+    backup_parent = Path("backups")
+    if backup_parent.exists():
+        if not os.access(backup_parent, os.W_OK):
+            errors.append(
+                f"GUARD 22 FAILED: Backup directory is not writable: {backup_parent.resolve()}\n"
+                f"                  FIX: chmod +w {backup_parent.resolve()}"
+            )
+    else:
+        # Check that cwd is writable (backup dir will be created there)
+        if not os.access('.', os.W_OK):
+            errors.append(
+                f"GUARD 22 FAILED: Current directory is not writable — cannot create backups/\n"
+                f"                  FIX: Run from a writable directory"
+            )
+
     # GUARD 23: File naming collision detection
     filename_map = {}
     for file_path in file_paths:
@@ -485,7 +515,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/validate-config-json.py my-plan/ops.json
+  python3 scripts/validate-config-json.py my-plan/ops.json
 
 Supported Formats:
   - LEGACY: {"plan": "...", "files": [...]} - Code edits only
@@ -517,8 +547,8 @@ Safety Guards (24 total):
   Backup/Restore (6):
     GUARD 19: Backup path format consistency
     GUARD 20: Manifest path reconstruction testability
-    GUARD 21: (reserved)
-    GUARD 22: (reserved)
+    GUARD 21: Plan name safe for filesystem paths
+    GUARD 22: Backup directory parent is writable
     GUARD 23: File naming collision detection
     GUARD 24: Nested directory path handling
         """

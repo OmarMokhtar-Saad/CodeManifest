@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-execute-json-ops.py - Execute JSON operations config (v2.1)
+execute-json-ops.py - Execute JSON operations config (v2.2)
 
 Purpose: Execute file create, delete, and code edit operations
-Usage: python scripts/execute-json-ops.py path/to/ops.json [--dry-run]
+Usage: python3 scripts/execute-json-ops.py path/to/ops.json [--dry-run]
 
 Supports Two Formats:
   - LEGACY: {"plan": "...", "files": [...]} - Code edits only
@@ -20,6 +20,7 @@ Features:
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -107,7 +108,9 @@ def execute_file_delete(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
         return True, "already-deleted"
 
     try:
-        backup_path = backup_dir / f"DELETED_{file_path.name}"
+        rel_path = os.path.relpath(file_path)
+        backup_path = backup_dir / rel_path
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(file_path, backup_path)
         print(f"  Backed up to: {backup_path}")
 
@@ -234,9 +237,10 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
     else:
         print()
 
-    # Create backup directory
+    # Create backup directory (sanitize plan name for safe filesystem path)
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    backup_dir = Path(f"backups/{plan_name}-{timestamp}")
+    safe_plan_name = re.sub(r'[^a-zA-Z0-9_-]', '_', plan_name)
+    backup_dir = Path(f"backups/{safe_plan_name}-{timestamp}")
 
     if not dry_run:
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -315,9 +319,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Workflow (always validate first):
-  1. Validate: python scripts/validate-config-json.py ops.json
-  2. Dry run:  python scripts/execute-json-ops.py ops.json --dry-run
-  3. Execute:  python scripts/execute-json-ops.py ops.json
+  1. Validate: python3 scripts/validate-config-json.py ops.json
+  2. Dry run:  python3 scripts/execute-json-ops.py ops.json --dry-run
+  3. Execute:  python3 scripts/execute-json-ops.py ops.json
 
 Operation Types:
   file_create: Create new file with content
