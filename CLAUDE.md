@@ -47,31 +47,76 @@ Workflow:
 2. Dry run:  `python3 scripts/execute-json-ops.py path/to/ops.json --dry-run`
 3. Execute:  `python3 scripts/execute-json-ops.py path/to/ops.json`
 
-### ops.json format
+### ops.json format (MODERN — preferred)
 
 ```json
 {
   "plan": "plan-name",
-  "files": [
+  "operations": [
     {
-      "path": "scripts/validate-config-json.py",
+      "type": "code_edit",
+      "path": "src/app.py",
       "edits": [
         {
           "find": "exact text to find",
           "replace": "replacement text"
         }
       ]
+    },
+    {
+      "type": "file_create",
+      "path": "src/new_module.py",
+      "content": "def new_function():\n    pass\n"
+    },
+    {
+      "type": "file_delete",
+      "path": "src/old_module.py",
+      "reason": "Replaced by new_module.py with improved implementation"
     }
   ]
 }
 ```
 
+### Operation types
+
+| Type | Required fields | Description |
+|------|----------------|-------------|
+| `code_edit` | `type`, `path`, `edits` | Edit existing file (find + replace/add_after/add_before/delete) |
+| `file_create` | `type`, `path`, `content` | Create new file |
+| `file_delete` | `type`, `path`, `reason` | Delete file (reason min 10 chars) |
+
+### Edit actions
+
+| Action | Description |
+|--------|-------------|
+| `replace` | Replace matched text with new content |
+| `add_after` | Insert content after matched text |
+| `add_before` | Insert content before matched text |
+| `delete` | Remove matched text (set to `true`) |
+
+### Legacy format (also supported)
+
+```json
+{
+  "plan": "plan-name",
+  "files": [
+    {
+      "path": "src/app.py",
+      "edits": [{ "find": "old", "replace": "new" }]
+    }
+  ]
+}
+```
+
+Legacy only supports code edits. Use modern format for file_create/file_delete.
+
 ### Constraints
 
-- Max 5 operations per config
+- Max 5 operations per config (split into parts if more)
 - Max 3 file deletions per config
-- `find` must be unique in the file
-- Protected: `*.md`, `.gitignore`, `examples/sample/*` (do not delete sample files)
+- `find` must be unique in the file (appear exactly once)
+- No extra fields — schema uses `additionalProperties: false`
+- Protected files cannot be deleted: `*.md`, `.gitignore`, `package.json`, `pyproject.toml`, etc.
 
 ### Folder structure
 
