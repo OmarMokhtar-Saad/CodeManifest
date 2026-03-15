@@ -38,14 +38,38 @@ python3 scripts/restore-backup.py --list
 python3 scripts/restore-backup.py --backup backups/<dir>
 ```
 
-## AI-Assisted Changes to This Repo
+## AI-Assisted Code Changes (MANDATORY)
 
-All code changes use the ops.json pattern (dogfooding).
+When asked to make ANY code change, you MUST use the ops.json pipeline.
+Do NOT use Edit/Write tools directly. No exceptions.
 
-Workflow:
-1. Validate: `python3 scripts/validate-config-json.py path/to/ops.json`
-2. Dry run:  `python3 scripts/execute-json-ops.py path/to/ops.json --dry-run`
-3. Execute:  `python3 scripts/execute-json-ops.py path/to/ops.json`
+### Step 1: GENERATE — Create ops.json
+
+1. Read every target file first (never guess content)
+2. Create `operations/{plan-name}/ops.json` using the MODERN format below
+3. Copy exact text for `find` patterns — preserve whitespace, escape for JSON
+
+### Step 2: VALIDATE — Run the validator
+
+```bash
+python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
+```
+
+Must output `-> APPROVED`. If REJECTED, fix ops.json and re-validate.
+
+### Step 3: EXECUTE — Dry run then apply
+
+```bash
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
+```
+
+### Step 4: VERIFY — Confirm changes
+
+```bash
+cat <modified-files>          # confirm changes applied
+python3 -m pytest tests/ -v   # confirm tests pass
+```
 
 ### ops.json format (MODERN — preferred)
 
