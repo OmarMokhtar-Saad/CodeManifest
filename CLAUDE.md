@@ -43,33 +43,31 @@ python3 scripts/restore-backup.py --backup backups/<dir>
 When asked to make ANY code change, you MUST use the ops.json pipeline.
 Do NOT use Edit/Write tools directly. No exceptions.
 
-### Step 1: GENERATE — Create ops.json
+### Step 1: `/generate-ops` — Create ops.json
 
-1. Read every target file first (never guess content)
-2. Create `operations/{plan-name}/ops.json` using the MODERN format below
-3. Copy exact text for `find` patterns — preserve whitespace, escape for JSON
+Invoke the skill: `/generate-ops <task description>`
 
-### Step 2: VALIDATE — Run the validator
+Or manually: read every target file, create `operations/{plan-name}/ops.json` using MODERN format.
 
-```bash
-python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
-```
+### Step 2: `/validate-ops` — Run the validator
+
+Invoke the skill: `/validate-ops operations/{plan-name}/ops.json`
 
 Must output `-> APPROVED`. If REJECTED, fix ops.json and re-validate.
 
-### Step 3: EXECUTE — Dry run then apply
+### Step 3: `/execute-ops` — Dry run then apply
 
-```bash
-python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
-python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
-```
+Invoke the skill: `/execute-ops operations/{plan-name}/ops.json`
 
-### Step 4: VERIFY — Confirm changes
+Runs dry-run first, then real execution, then verifies with tests.
 
-```bash
-cat <modified-files>          # confirm changes applied
-python3 -m pytest tests/ -v   # confirm tests pass
-```
+### Skills (slash commands)
+
+| Command | Purpose |
+|---------|---------|
+| `/generate-ops <task>` | Read files and create ops.json |
+| `/validate-ops <path>` | Run validator + dry-run |
+| `/execute-ops <path>` | Execute ops.json with backup |
 
 ### ops.json format (MODERN — preferred)
 
