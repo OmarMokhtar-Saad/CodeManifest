@@ -30,7 +30,7 @@ Give Python the other job: **execute it.**
 ```
 AI (expensive, thinks once)         Python (free, runs deterministically)
 ─────────────────────────           ──────────────────────────────────────
-Reads the files                     Validates the JSON (24 guards)
+Reads the files                     Validates the JSON (29 guards)
 Identifies exact find patterns      Backs up every touched file
 Writes ops.json                     Applies the changes
 Stops.                              Reports results / rolls back on failure

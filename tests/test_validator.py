@@ -338,6 +338,51 @@ class TestFileSizeInValidator:
         assert valid, errors
 
 
+class TestMaxOperationsLimit:
+    """GUARD 28: Max 5 operations enforced even without jsonschema."""
+
+    def test_too_many_ops_legacy_rejected(self, tmp_project, monkeypatch):
+        monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
+        files = []
+        for i in range(6):
+            f = tmp_project / f"file{i}.py"
+            f.write_text(f"content_{i} = {i}\n")
+            files.append({"path": str(f), "edits": [{"find": f"content_{i} = {i}", "replace": f"content_{i} = 0"}]})
+        config = {"plan": "test", "files": files}
+        p = tmp_project / "ops.json"
+        p.write_text(json.dumps(config))
+        valid, errors = validator.validate_json_config(str(p))
+        assert not valid
+        assert any("too many" in e.lower() for e in errors)
+
+    def test_too_many_ops_modern_rejected(self, tmp_project, monkeypatch):
+        monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
+        ops = []
+        for i in range(6):
+            f = tmp_project / f"file{i}.py"
+            f.write_text(f"val_{i} = {i}\n")
+            ops.append({"type": "code_edit", "path": str(f), "edits": [{"find": f"val_{i} = {i}", "replace": f"val_{i} = 0"}]})
+        config = {"plan": "test", "operations": ops}
+        p = tmp_project / "ops.json"
+        p.write_text(json.dumps(config))
+        valid, errors = validator.validate_json_config(str(p))
+        assert not valid
+        assert any("too many" in e.lower() for e in errors)
+
+    def test_five_ops_accepted(self, tmp_project, monkeypatch):
+        monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
+        ops = []
+        for i in range(5):
+            f = tmp_project / f"file{i}.py"
+            f.write_text(f"x_{i} = {i}\n")
+            ops.append({"type": "code_edit", "path": str(f), "edits": [{"find": f"x_{i} = {i}", "replace": f"x_{i} = 0"}]})
+        config = {"plan": "test", "operations": ops}
+        p = tmp_project / "ops.json"
+        p.write_text(json.dumps(config))
+        valid, errors = validator.validate_json_config(str(p))
+        assert valid, errors
+
+
 class TestNullBytesInPaths:
     """BUG 10: Null bytes unchecked in file paths."""
 

@@ -14,7 +14,7 @@ Features:
   - Automatic backup before all operations (including deleted files)
   - Backup manifest generation (compatible with restore-backup.py)
   - Dry-run mode for previewing changes without applying them
-  - Rollback support on failure
+  - Automatic rollback on failure (restores from backup)
 """
 
 import argparse
@@ -313,6 +313,8 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
     success_count = 0
     error_count = 0
     stats = {'file_create': 0, 'file_delete': 0, 'code_edit': 0}
+    files_modified: List[str] = []
+    files_created: List[str] = []
 
     for i, operation in enumerate(operations, 1):
         op_type = operation.get('type', 'unknown')
@@ -321,17 +323,23 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
         print(f"[{i}/{len(operations)}] {op_type.upper()}: {file_path}")
 
         if op_type == 'file_create':
-            success, _ = execute_file_create(operation, backup_dir, dry_run)
+            success, status = execute_file_create(operation, backup_dir, dry_run)
             if success:
                 stats['file_create'] += 1
+                if status == "created":
+                    files_created.append(str(file_path))
         elif op_type == 'file_delete':
-            success, _ = execute_file_delete(operation, backup_dir, dry_run)
+            success, status = execute_file_delete(operation, backup_dir, dry_run)
             if success:
                 stats['file_delete'] += 1
+                if status == "deleted":
+                    files_modified.append(str(file_path))
         elif op_type == 'code_edit':
-            success, _ = execute_code_edit(operation, backup_dir, dry_run)
+            success, status = execute_code_edit(operation, backup_dir, dry_run)
             if success:
                 stats['code_edit'] += 1
+                if status == "edited":
+                    files_modified.append(str(file_path))
         else:
             print(f"  Unknown operation type: {op_type}")
             success = False
@@ -340,10 +348,26 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
             success_count += 1
         else:
             error_count += 1
+            # Rollback on failure (only when actually modifying files)
+            if not dry_run:
+                print("\n  ROLLBACK: Restoring files from backup...")
+                for fp in files_modified:
+                    rel = Path(os.path.relpath(fp))
+                    bp = backup_dir / rel
+                    if bp.exists():
+                        shutil.copy(str(bp), fp)
+                        print(f"  Restored: {fp}")
+                for fp in files_created:
+                    if os.path.exists(fp):
+                        os.unlink(fp)
+                        print(f"  Removed: {fp}")
+                print("  ROLLBACK COMPLETE")
+            break
 
         print()
 
     # Summary
+    print()
     print("-" * 50)
     print(f"{'DRY RUN COMPLETE' if dry_run else 'EXECUTION COMPLETE'}")
     print(f"Operations: {len(operations)} total")

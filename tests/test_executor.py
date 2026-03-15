@@ -296,3 +296,63 @@ class TestExecutorSmoke:
         assert result is True
         assert new_file.exists()
         assert new_file.read_text() == "new_var = True\n"
+
+
+class TestRollbackOnFailure:
+    """Critical fix: rollback restores files when a later operation fails."""
+
+    def test_rollback_restores_edited_file(self, tmp_project):
+        """If op 2 fails, op 1's changes should be rolled back."""
+        sample = tmp_project / "app.py"
+        original = 'x = 1\ny = 2\n'
+        sample.write_text(original)
+
+        config = {
+            "plan": "rollback-test",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "replace": "x = 99"}],
+                },
+                {
+                    "type": "code_edit",
+                    "path": str(tmp_project / "nonexistent.py"),
+                    "edits": [{"find": "a", "replace": "b"}],
+                },
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+        # File should be restored to original
+        assert sample.read_text() == original
+
+    def test_rollback_removes_created_file(self, tmp_project):
+        """Created files should be removed on rollback."""
+        new_file = tmp_project / "created.py"
+        failing = tmp_project / "nope.py"
+
+        config = {
+            "plan": "rollback-create",
+            "operations": [
+                {
+                    "type": "file_create",
+                    "path": str(new_file),
+                    "content": "new content\n",
+                },
+                {
+                    "type": "code_edit",
+                    "path": str(failing),
+                    "edits": [{"find": "x", "replace": "y"}],
+                },
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+        assert not new_file.exists()

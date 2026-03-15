@@ -259,6 +259,13 @@ def validate_legacy_format(config: dict, errors: List[str]) -> Tuple[bool, List[
     if not files:
         errors.append("No files defined in config")
 
+    # GUARD 28: Max operations limit
+    if len(files) > 5:
+        errors.append(
+            f"Too many operations ({len(files)}) — maximum 5 per config\n"
+            f"                  Split into multiple configs if needed"
+        )
+
     for i, file_op in enumerate(files, 1):
         # GUARD 5: Validate required fields for each file
         if 'path' not in file_op:
@@ -360,6 +367,13 @@ def validate_modern_format(config: dict, errors: List[str]) -> Tuple[bool, List[
     if not operations:
         errors.append("No operations defined in config")
         return False, errors
+
+    # GUARD 28: Max operations limit
+    if len(operations) > 5:
+        errors.append(
+            f"Too many operations ({len(operations)}) — maximum 5 per config\n"
+            f"                  Split into multiple configs if needed"
+        )
 
     # Validate file operations (GUARD 12-18)
     file_ops_valid, file_ops_errors = validate_file_operations(operations)
@@ -602,7 +616,7 @@ Supported Formats:
   - LEGACY: {"plan": "...", "files": [...]} - Code edits only
   - MODERN: {"plan": "...", "operations": [...]} - file_create, file_delete, code_edit
 
-Safety Guards (24 total):
+Safety Guards (29 total):
   Code Editing (11):
     GUARD 1:  Config file existence
     GUARD 2:  JSON syntax validation
@@ -632,6 +646,13 @@ Safety Guards (24 total):
     GUARD 22: Backup directory parent is writable
     GUARD 23: File naming collision detection
     GUARD 24: Nested directory path handling
+
+  Security (5):
+    GUARD 25: Null byte rejection in file paths
+    GUARD 26: Null byte rejection in content
+    GUARD 27: File size limit (2MB)
+    GUARD 28: Max operations limit (5 per config)
+    GUARD 29: Operation type validation
         """
     )
     parser.add_argument('config', help='Path to JSON operations config file')
