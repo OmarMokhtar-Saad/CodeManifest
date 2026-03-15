@@ -89,16 +89,19 @@ The execution phase (Python running the script) costs 0 tokens.
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/codemanifest.git
-cd codemanifest
+git clone https://github.com/OmarMokhtar-Saad/CodeManifest.git
+cd CodeManifest
 
-# Optional: enable JSON schema validation
-pip3 install jsonschema
+# Optional: enable JSON schema validation and tests
+pip3 install jsonschema pytest
 
 # Try the examples (they run against real files in examples/sample/)
 python3 scripts/validate-config-json.py examples/01-simple-edit.json
 python3 scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
 python3 scripts/execute-json-ops.py examples/01-simple-edit.json
+
+# Run the test suite
+python3 -m pytest tests/ -v
 ```
 
 Expected output after execution:
@@ -128,26 +131,7 @@ Errors:     0
 
 ## The ops.json Format
 
-### Legacy Format — code edits only
-
-```json
-{
-  "plan": "bump-version",
-  "files": [
-    {
-      "path": "src/version.py",
-      "edits": [
-        {
-          "find": "VERSION = \"1.0.0\"",
-          "replace": "VERSION = \"1.1.0\""
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Modern Format — create, edit, and delete
+### Modern Format (preferred) — create, edit, and delete
 
 ```json
 {
@@ -176,6 +160,27 @@ Errors:     0
   ]
 }
 ```
+
+### Legacy Format — code edits only
+
+```json
+{
+  "plan": "bump-version",
+  "files": [
+    {
+      "path": "src/version.py",
+      "edits": [
+        {
+          "find": "VERSION = \"1.0.0\"",
+          "replace": "VERSION = \"1.1.0\""
+        }
+      ]
+    }
+  ]
+}
+```
+
+Legacy format only supports code edits. Use modern format for file_create/file_delete.
 
 ### Edit Actions
 
@@ -215,7 +220,7 @@ Execute in order: `part1` first, then `part2`.
 
 ### `validate-config-json.py`
 
-Runs 24 safety guards before any file is touched. Returns exit code 0 (approved) or 1 (rejected with errors).
+Runs 29 safety guards before any file is touched. Returns exit code 0 (approved) or 1 (rejected with errors).
 
 ```bash
 python3 scripts/validate-config-json.py path/to/ops.json
@@ -228,6 +233,7 @@ python3 scripts/validate-config-json.py path/to/ops.json
 | Code editing | 11 | File existence, JSON syntax, required fields, find pattern exists in file, ambiguous match detection |
 | File operations | 7 | Overwrite protection, protected file check, parent directory existence, deletion reason, directory check |
 | Backup safety | 6 | Path format consistency, path reconstruction, filename collision detection, nested directory handling |
+| Security | 5 | Null byte rejection in paths and content, file size limits, operation type validation |
 
 ### `execute-json-ops.py`
 
@@ -307,26 +313,42 @@ skills/
 
 ### Claude Code setup
 
-Copy the skill files into your project:
+**Step 1:** Copy the scripts and skills into your project:
 
-```
-your-project/
-└── .claude/
-    └── skills/
-        ├── generate-operations-config/
-        │   └── SKILL.md        ← contents of skills/generate-operations-config.md
-        ├── validate-operations-config/
-        │   └── SKILL.md
-        └── execute-operations-config/
-            └── SKILL.md
+```bash
+# Copy scripts
+cp -r scripts/ your-project/scripts/
+
+# Copy the pre-configured .claude/skills/ directory
+cp -r .claude/ your-project/.claude/
 ```
 
-Then reference them in your `CLAUDE.md`:
+This gives you three slash commands that Claude Code recognizes automatically:
 
-```markdown
-## Code Changes
-All implementation plans require ops.json. Plans without it are rejected.
-Follow the `generate-operations-config` skill for all code changes.
+| Slash command | What it does |
+|---|---|
+| `/generate-ops <task>` | AI reads files and creates `ops.json` (never writes code directly) |
+| `/validate-ops <path>` | Runs the validator script + dry-run, reports APPROVED/REJECTED |
+| `/execute-ops <path>` | Runs dry-run, then real execution, then verifies with tests |
+
+Each skill prints `[SKILL: name]` tags so you can verify it was invoked.
+
+**Step 2:** Add a `CLAUDE.md` to your project:
+
+```bash
+cp templates/CLAUDE.md.template your-project/CLAUDE.md
+# Edit: fill in your project name and test command
+```
+
+**Step 3:** Use it:
+
+```
+You: "Add logging to src/app.py"
+
+Claude automatically:
+1. /generate-ops → reads files, creates operations/add-logging/ops.json
+2. /validate-ops → runs validator, reports APPROVED
+3. /execute-ops → dry-run, execute, verify with tests
 ```
 
 ### Other LLMs (GPT-4, Gemini, Cursor, Copilot)
@@ -338,38 +360,38 @@ The concepts are identical — only the invocation mechanism differs.
 System prompt addition:
 "When asked to implement any code change, follow this workflow:
  1. Read every target file first.
- 2. Produce ops.json describing the exact changes.
+ 2. Produce ops.json describing the exact changes (MODERN format with operations/type).
  3. Stop. Do NOT write code directly.
- [paste generate-operations-config.md content here]"
+ [paste contents of .claude/skills/generate-operations-config/SKILL.md here]"
 ```
 
 ---
 
 ## Adopting in Your Project
 
-**5 steps, under 10 minutes:**
+**4 steps, under 5 minutes:**
 
 ```bash
-# Step 1: Copy the scripts into your project
+# Step 1: Copy scripts + skills into your project
 cp -r scripts/ your-project/scripts/
+cp -r .claude/ your-project/.claude/
 
-# Step 2: Copy the skills (if using Claude Code)
-cp -r skills/ your-project/.claude/skills/
-
-# Step 3: Set up CLAUDE.md
+# Step 2: Set up CLAUDE.md
 cp templates/CLAUDE.md.template your-project/CLAUDE.md
 # Edit: fill in your project name and test command
 
-# Step 4: Add your stack's protected files
-# Open scripts/validate-config-json.py
-# Find PROTECTED_PATTERNS and add project-specific files:
+# Step 3: (Optional) Add your stack's protected files
+# Open scripts/validate-config-json.py → find PROTECTED_PATTERNS
+# Already included: .gitignore, *.md, Makefile, Dockerfile, requirements.txt,
+#   package.json, package-lock.json, yarn.lock, pyproject.toml, setup.py,
+#   setup.cfg, Pipfile, Pipfile.lock, tsconfig.json
+# Add more for your stack:
 #   Java/Gradle: "build.gradle.kts", "settings.gradle.kts", "gradlew"
-#   Node.js:     "package-lock.json", "tsconfig.json"
-#   Python:      "Pipfile", "setup.cfg"
 #   iOS:         "Podfile", "Podfile.lock"
+#   CI/CD:       ".github/workflows/*.yml"
 
-# Step 5: Test it
-python3 scripts/validate-config-json.py examples/01-simple-edit.json
+# Step 4: Test it — ask Claude to make a small change
+# Claude will use /generate-ops, /validate-ops, /execute-ops automatically
 ```
 
 ---
@@ -394,29 +416,41 @@ python3 scripts/validate-config-json.py examples/01-simple-edit.json
 
 | Requirement | Notes |
 |---|---|
-| Python 3.8+ | No external packages required |
-| Git | Used for relative path resolution in backups |
+| Python 3.6+ | No external packages required |
+| Any OS | macOS, Linux, Windows — cross-platform path handling |
 | `jsonschema` | Optional. Enables strict schema validation. `pip3 install jsonschema` |
+| `pytest` | Optional. For running the test suite. `pip3 install pytest` |
 
 **Zero npm. Zero pip installs for core functionality.** Everything runs on Python's standard library.
+
+**CI tested:** Python 3.9, 3.11, 3.12 on Ubuntu. 80 tests, 77% coverage.
 
 ---
 
 ## Project Structure
 
 ```
-codemanifest/
+CodeManifest/
 ├── scripts/
-│   ├── validate-config-json.py    24-guard pre-flight validator
+│   ├── validate-config-json.py    29-guard pre-flight validator
 │   ├── execute-json-ops.py        Safe executor with auto-backup + manifest
 │   ├── restore-backup.py          One-command recovery with 10 safety guards
 │   └── operations-schema.json     Strict JSON Schema (used by validator)
 │
-├── skills/
-│   ├── README.md                  How to set up skills in Claude Code or other LLMs
-│   ├── generate-operations-config.md   AI produces ops.json, not code
-│   ├── validate-operations-config.md   AI reviews ops.json before execution
-│   └── execute-operations-config.md    AI runs the executor script
+├── .claude/skills/                Claude Code slash commands (copy to your project)
+│   ├── generate-operations-config/SKILL.md   /generate-ops — AI produces ops.json
+│   ├── validate-operations-config/SKILL.md   /validate-ops — AI validates ops.json
+│   └── execute-operations-config/SKILL.md    /execute-ops  — AI runs executor
+│
+├── skills/                        Generic skill files (for any LLM)
+│   ├── generate-operations-config.md
+│   ├── validate-operations-config.md
+│   └── execute-operations-config.md
+│
+├── tests/                         80 tests, 77% coverage
+│   ├── conftest.py                Shared fixtures
+│   ├── test_validator.py          Validator tests (all 29 guards)
+│   └── test_executor.py           Executor tests (protected files, partial edits, etc.)
 │
 ├── examples/
 │   ├── sample/                    Real files the examples run against
@@ -427,7 +461,9 @@ codemanifest/
 ├── templates/
 │   └── CLAUDE.md.template         Drop into any project to activate the pattern
 │
-└── CLAUDE.md                      Project context for AI-assisted development of this repo
+├── .github/workflows/ci.yml      CI: validate examples + run tests on Python 3.9/3.11/3.12
+│
+└── CLAUDE.md                      Project context for AI-assisted development
 ```
 
 ---

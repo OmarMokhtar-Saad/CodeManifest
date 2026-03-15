@@ -3,56 +3,64 @@
 Skills are markdown files that give the AI a precise role and decision tree for a specific task.
 They are what make the AI generate `ops.json` **automatically** instead of writing code directly.
 
-## How Skills Work
-
-When the AI receives a request, your `CLAUDE.md` routes it to the correct skill.
-The AI reads the skill file first, then produces the expected output — and stops.
-
-```
-User request
-    |
-CLAUDE.md (traffic controller)
-    |
-Loads matching skill
-    |
-AI follows skill instructions
-    |
-Produces ops.json (not code)
-```
-
 ## Available Skills
 
-| Skill | File | Purpose |
+| Slash command | Skill file | Purpose |
 |---|---|---|
-| Generate | `generate-operations-config.md` | AI produces `ops.json` from a task description |
-| Validate | `validate-operations-config.md` | AI reviews `ops.json` before execution |
-| Execute | `execute-operations-config.md` | AI runs the Python executor script |
+| `/generate-ops` | `generate-operations-config` | AI reads files and produces `ops.json` |
+| `/validate-ops` | `validate-operations-config` | AI runs validator + dry-run, reports APPROVED/REJECTED |
+| `/execute-ops` | `execute-operations-config` | AI runs executor with backup, verifies with tests |
 
-## Setup (Claude Code)
+Each skill prints `[SKILL: name]` tags so you can verify it was invoked.
 
-These skills use Claude Code's `Skill` tool system.
+## Setup — Claude Code
 
-1. Place these files anywhere in your repo (e.g., `.claude/skills/<name>/SKILL.md`)
-2. Register them in `.claude/skills/skills-registry.json`
-3. Reference them in your `CLAUDE.md`
+Copy the `.claude/skills/` directory from this repo into your project:
 
-See `templates/CLAUDE.md.template` for the minimal wiring needed.
+```bash
+cp -r .claude/ your-project/.claude/
+```
 
-## Setup (Other LLMs)
+This creates:
 
-For GPT-4, Gemini, Cursor, or any other LLM:
+```
+your-project/
+└── .claude/
+    └── skills/
+        ├── generate-operations-config/SKILL.md
+        ├── validate-operations-config/SKILL.md
+        └── execute-operations-config/SKILL.md
+```
 
-Use the skill content as part of your **system prompt** or **instruction file**.
+Claude Code auto-discovers these as slash commands. No registry file needed.
+
+Then add a `CLAUDE.md` to your project (see `templates/CLAUDE.md.template`).
+
+## Setup — Other LLMs (GPT-4, Gemini, Cursor, Copilot)
+
+Use the generic skill files in `skills/` as part of your **system prompt** or **instruction file**.
 The concepts are identical — only the invocation mechanism differs.
 
-Example system prompt addition:
 ```
-When asked to implement code changes, follow the generate-operations-config skill:
-produce an ops.json file describing the changes, do NOT write code directly.
+System prompt addition:
+"When asked to implement code changes, produce an ops.json file describing
+the exact changes using the MODERN format (operations/type). Do NOT write
+code directly.
+[paste contents of skills/generate-operations-config.md here]"
 ```
 
-## Why This Matters
+## How it works
 
-Without skills, you have to manually remind the AI to use ops.json every time.
-With skills, the AI automatically knows its role, constraints, and output format
-for every request — zero manual prompting needed.
+```
+User: "Add logging to src/app.py"
+         |
+   CLAUDE.md says: use ops.json pipeline
+         |
+   /generate-ops → reads files, creates ops.json
+         |
+   /validate-ops → runs validator, APPROVED
+         |
+   /execute-ops  → dry-run, execute, verify
+         |
+   Done. Changes applied with backup.
+```
