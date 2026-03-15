@@ -9,10 +9,11 @@ Supports Two Formats:
   - LEGACY: {"plan": "...", "files": [...]} - Code edits only
   - MODERN: {"plan": "...", "operations": [...]} - file_create, file_delete, code_edit
 
-Validation Guards: 24 total
+Validation Guards: 29 total
   - 11 guards for code editing
   - 7 guards for file operations (create/delete)
   - 6 guards for backup/restore compatibility
+  - 5 guards for security (null bytes, file size, operation type)
 """
 
 import argparse
@@ -42,9 +43,18 @@ PROTECTED_PATTERNS = [
     "docker-compose.yaml",
     "requirements.txt",
     "package.json",
+    "package-lock.json",
+    "yarn.lock",
     "pyproject.toml",
     "setup.py",
+    "setup.cfg",
+    "Pipfile",
+    "Pipfile.lock",
+    "tsconfig.json",
 ]
+
+# Maximum file size the executor will process (2MB)
+MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
 
 
 def is_protected_file(file_path: str) -> bool:
@@ -93,6 +103,11 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
             file_path = op.get('path', '')
             reason = op.get('reason', '')
 
+            # GUARD 25: Null byte check on path
+            if file_path and '\x00' in file_path:
+                errors.append(f"Operation {i} (file_delete): Path contains null bytes")
+                continue
+
             # GUARD 12: File exists before deletion
             if file_path and not os.path.exists(file_path):
                 errors.append(f"Operation {i} (file_delete): Cannot delete non-existent file: {file_path}")
@@ -118,6 +133,15 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
         elif op_type == 'file_create':
             file_path = op.get('path', '')
             content = op.get('content', '')
+
+            # GUARD 25: Null byte check on path
+            if file_path and '\x00' in file_path:
+                errors.append(f"Operation {i} (file_create): Path contains null bytes")
+                continue
+
+            # GUARD 26: Null byte check on content
+            if content and '\x00' in content:
+                errors.append(f"Operation {i} (file_create): Content contains null bytes")
 
             # GUARD 18: File doesn't already exist (overwrite protection)
             if file_path and os.path.exists(file_path):
@@ -243,9 +267,22 @@ def validate_legacy_format(config: dict, errors: List[str]) -> Tuple[bool, List[
 
         file_path = file_op['path']
 
+        # GUARD 25: Null byte check on path
+        if '\x00' in file_path:
+            errors.append(f"File {i}: Path contains null bytes")
+            continue
+
         # GUARD 6: Check file exists
         if not os.path.exists(file_path):
             errors.append(f"File {i}: File does not exist: {file_path}")
+            continue
+
+        # GUARD 27: File size check
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE_BYTES:
+            errors.append(
+                f"File {i}: File too large ({file_size} bytes, max {MAX_FILE_SIZE_BYTES}): {file_path}"
+            )
             continue
 
         # GUARD 7: Validate edits array exists
@@ -280,6 +317,14 @@ def validate_legacy_format(config: dict, errors: List[str]) -> Tuple[bool, List[
                 continue
 
             find_pattern = edit['find']
+
+            # GUARD 26: Null byte check on find pattern and action content
+            if '\x00' in find_pattern:
+                errors.append(f"File {i}, Edit {j}: Find pattern contains null bytes")
+                continue
+            for action_key in ('replace', 'add_after', 'add_before'):
+                if action_key in edit and '\x00' in edit[action_key]:
+                    errors.append(f"File {i}, Edit {j}: '{action_key}' content contains null bytes")
 
             # GUARD 10: Verify 'find' exists in file
             if find_pattern not in file_content:
@@ -321,70 +366,106 @@ def validate_modern_format(config: dict, errors: List[str]) -> Tuple[bool, List[
     if not file_ops_valid:
         errors.extend(file_ops_errors)
 
-    # Validate code_edit operations
+    # Validate all operations
+    valid_types = ['file_create', 'file_delete', 'code_edit']
     for i, op in enumerate(operations, 1):
         op_type = op.get('type', '')
 
-        if op_type == 'code_edit':
-            file_path = op.get('path', '')
+        # GUARD 29: Validate operation type
+        if op_type not in valid_types:
+            errors.append(
+                f"Operation {i}: Unknown type '{op_type}' (must be one of: {valid_types})"
+            )
+            continue
 
-            # GUARD 6: Check file exists
-            if not os.path.exists(file_path):
-                errors.append(f"Operation {i} (code_edit): File does not exist: {file_path}")
+        # GUARD 5: Validate path field exists
+        if 'path' not in op:
+            errors.append(f"Operation {i} ({op_type}): Missing 'path' field")
+            continue
+
+        if op_type != 'code_edit':
+            continue
+
+        file_path = op.get('path', '')
+
+        # GUARD 25: Null byte check on path
+        if '\x00' in file_path:
+            errors.append(f"Operation {i} (code_edit): Path contains null bytes")
+            continue
+
+        # GUARD 6: Check file exists
+        if not os.path.exists(file_path):
+            errors.append(f"Operation {i} (code_edit): File does not exist: {file_path}")
+            continue
+
+        # GUARD 27: File size check
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE_BYTES:
+            errors.append(
+                f"Operation {i} (code_edit): File too large ({file_size} bytes, max {MAX_FILE_SIZE_BYTES}): {file_path}"
+            )
+            continue
+
+        # GUARD 7: Validate edits array exists
+        if 'edits' not in op:
+            errors.append(f"Operation {i} (code_edit): Missing 'edits' array")
+            continue
+
+        edits = op['edits']
+        if not edits:
+            errors.append(f"Operation {i} (code_edit): Empty 'edits' array")
+            continue
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+        except Exception as e:
+            errors.append(f"Operation {i} (code_edit): Error reading file: {e}")
+            continue
+
+        for j, edit in enumerate(edits, 1):
+            # GUARD 8: Check for action type
+            action_types = ['add_after', 'add_before', 'replace', 'delete']
+            has_action = any(act in edit for act in action_types)
+            if not has_action:
+                errors.append(
+                    f"Operation {i}, Edit {j}: No action specified (need one of: {action_types})"
+                )
+
+            # GUARD 9: Check 'find' pattern exists
+            if 'find' not in edit:
+                errors.append(f"Operation {i}, Edit {j}: Missing 'find' pattern")
                 continue
 
-            # GUARD 7: Validate edits array exists
-            if 'edits' not in op:
-                errors.append(f"Operation {i} (code_edit): Missing 'edits' array")
+            find_pattern = edit['find']
+
+            # GUARD 26: Null byte check on find pattern and action content
+            if '\x00' in find_pattern:
+                errors.append(f"Operation {i}, Edit {j}: Find pattern contains null bytes")
+                continue
+            for action_key in ('replace', 'add_after', 'add_before'):
+                if action_key in edit and '\x00' in edit[action_key]:
+                    errors.append(f"Operation {i}, Edit {j}: '{action_key}' content contains null bytes")
+
+            # GUARD 10: Verify 'find' exists in file
+            if find_pattern not in file_content:
+                preview = find_pattern[:50].replace('\n', '\\n')
+                if len(find_pattern) > 50:
+                    preview += "..."
+                errors.append(
+                    f"Operation {i}, Edit {j}: Pattern not found in file\n"
+                    f"                  Looking for: \"{preview}\"\n"
+                    f"                  FIX: Check for typos, extra spaces, or wrong line"
+                )
                 continue
 
-            edits = op['edits']
-            if not edits:
-                errors.append(f"Operation {i} (code_edit): Empty 'edits' array")
-                continue
-
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-            except Exception as e:
-                errors.append(f"Operation {i} (code_edit): Error reading file: {e}")
-                continue
-
-            for j, edit in enumerate(edits, 1):
-                # GUARD 8: Check for action type
-                action_types = ['add_after', 'add_before', 'replace', 'delete']
-                has_action = any(act in edit for act in action_types)
-                if not has_action:
-                    errors.append(
-                        f"Operation {i}, Edit {j}: No action specified (need one of: {action_types})"
-                    )
-
-                # GUARD 9: Check 'find' pattern exists
-                if 'find' not in edit:
-                    errors.append(f"Operation {i}, Edit {j}: Missing 'find' pattern")
-                    continue
-
-                find_pattern = edit['find']
-
-                # GUARD 10: Verify 'find' exists in file
-                if find_pattern not in file_content:
-                    preview = find_pattern[:50].replace('\n', '\\n')
-                    if len(find_pattern) > 50:
-                        preview += "..."
-                    errors.append(
-                        f"Operation {i}, Edit {j}: Pattern not found in file\n"
-                        f"                  Looking for: \"{preview}\"\n"
-                        f"                  FIX: Check for typos, extra spaces, or wrong line"
-                    )
-                    continue
-
-                # GUARD 11: Check for multiple occurrences (ambiguous match)
-                occurrence_count = file_content.count(find_pattern)
-                if occurrence_count > 1:
-                    errors.append(
-                        f"Operation {i}, Edit {j}: Pattern appears {occurrence_count} times in file\n"
-                        f"                  FIX: Make pattern more specific to match only once"
-                    )
+            # GUARD 11: Check for multiple occurrences (ambiguous match)
+            occurrence_count = file_content.count(find_pattern)
+            if occurrence_count > 1:
+                errors.append(
+                    f"Operation {i}, Edit {j}: Pattern appears {occurrence_count} times in file\n"
+                    f"                  FIX: Make pattern more specific to match only once"
+                )
 
     return len(errors) == 0, errors
 
@@ -438,8 +519,8 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
     for file_path in file_paths:
         try:
             rel_path = os.path.relpath(file_path)
-            reconstructed = os.path.abspath(rel_path)
-            original = os.path.abspath(file_path)
+            reconstructed = os.path.realpath(rel_path)
+            original = os.path.realpath(file_path)
             if reconstructed != original:
                 errors.append(
                     f"GUARD 20 FAILED: Path reconstruction mismatch: {file_path}"

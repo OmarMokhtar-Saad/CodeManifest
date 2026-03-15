@@ -18,7 +18,9 @@ Features:
 """
 
 import argparse
+import fnmatch
 import json
+import logging
 import os
 import re
 import shutil
@@ -26,6 +28,40 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+# Protected file patterns (cannot be deleted via ops config)
+PROTECTED_PATTERNS = [
+    ".gitignore",
+    "*.md",
+    "Makefile",
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "requirements.txt",
+    "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "Pipfile",
+    "Pipfile.lock",
+    "tsconfig.json",
+]
+
+
+def is_protected_file(file_path: str) -> bool:
+    """
+    Check if file matches protected patterns.
+    Protected files CANNOT be deleted via operations config.
+    """
+    file_name = os.path.basename(file_path)
+    for pattern in PROTECTED_PATTERNS:
+        if fnmatch.fnmatch(file_name, pattern):
+            return True
+    return False
 
 
 def normalize_config(config: dict) -> dict:
@@ -94,7 +130,12 @@ def execute_file_create(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
 def execute_file_delete(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple[bool, str]:
     """Back up then delete specified file."""
     file_path = Path(operation['path'])
-    reason = operation['reason']
+    reason = operation.get('reason', '')
+
+    # Check protected file patterns
+    if is_protected_file(str(file_path)):
+        print(f"  BLOCKED: Cannot delete protected file: {file_path}")
+        return False, "protected-file"
 
     if dry_run:
         print(f"  [DRY RUN] Would delete: {file_path}")
@@ -191,6 +232,12 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
 
         else:
             print(f"  Edit {j}: No action specified (add_after, add_before, replace, delete)")
+
+    if edits_applied < len(edits):
+        logger.warning(
+            "Only %d of %d edits applied for %s", edits_applied, len(edits), file_path
+        )
+        print(f"  WARNING: Only {edits_applied}/{len(edits)} edits applied")
 
     if dry_run:
         print(f"  [DRY RUN] Would write {len(modified_content)} bytes to: {file_path}")

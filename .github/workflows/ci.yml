@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest coverage jsonschema
+
+      - name: Validate example 01
+        run: python scripts/validate-config-json.py examples/01-simple-edit.json
+
+      - name: Validate example 02
+        run: python scripts/validate-config-json.py examples/02-multi-file-edit.json
+
+      - name: Validate example 03
+        run: python scripts/validate-config-json.py examples/03-file-operations.json
+
+      - name: Dry-run example 01
+        run: python scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
+
+      - name: Dry-run example 02
+        run: python scripts/execute-json-ops.py examples/02-multi-file-edit.json --dry-run
+
+      - name: Dry-run example 03
+        run: python scripts/execute-json-ops.py examples/03-file-operations.json --dry-run
+
+      - name: Run tests with coverage
+        run: coverage run -m pytest tests/ -v
+
+      - name: Check coverage
+        run: coverage report --fail-under=75
