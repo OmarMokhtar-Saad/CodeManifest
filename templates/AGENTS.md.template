@@ -1,0 +1,73 @@
+# AGENTS.md
+
+## Code Changes
+
+All code changes use the **Operations Config Pattern**.
+AI describes changes in `ops.json`. Python executes them.
+
+**Scripts directory**: `scripts/`
+
+## Workflow
+
+1. **Read** every target file before writing any `find` pattern
+2. **Generate** `ops.json` at `operations/{plan-name}/ops.json`
+3. **Validate**: `python scripts/validate-config-json.py operations/{plan-name}/ops.json`
+4. **Dry run**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run`
+5. **Execute**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json`
+
+## ops.json Format
+
+```json
+{
+  "plan": "plan-name",
+  "operations": [
+    {
+      "type": "code_edit",
+      "path": "relative/path/to/file",
+      "edits": [
+        {
+          "find": "exact text to match",
+          "replace": "replacement text"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Edit Actions
+
+| Action | Description |
+|---|---|
+| `replace` | Replace matched text with new content |
+| `add_after` | Insert content after matched text |
+| `add_before` | Insert content before matched text |
+| `delete` | Remove matched text (set to `true`) |
+
+## Operation Types
+
+- `code_edit` — edit existing file (requires `path`, `edits`)
+- `file_create` — create new file (requires `path`, `content`)
+- `file_delete` — delete file (requires `path`, `reason` min 10 chars)
+
+## Constraints
+
+- Max **5 operations** per config (split into `part1-ops.json`, `part2-ops.json` if more)
+- Max **3 deletions** per config
+- `find` must appear **exactly once** in the target file
+- No extra fields — schema enforces `additionalProperties: false`
+- **Never** edit files directly when `ops.json` exists for the plan
+
+## Restore
+
+```bash
+python scripts/restore-backup.py --list
+python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}
+```
+
+## Test Command
+
+```bash
+# TODO: Replace with your project's test command
+# pytest / npm test / ./gradlew test / go test ./...
+```

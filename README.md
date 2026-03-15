@@ -129,6 +129,22 @@ Errors:     0
 
 ---
 
+## Ready-to-Paste Setup Prompts
+
+Skip the docs. Paste a prompt. Your AI sets up everything.
+
+| Your AI Tool | Prompt | What it does |
+|---|---|---|
+| Claude Code | [setup-claude-code.md](prompts/setup-claude-code.md) | Copies scripts + skills + CLAUDE.md, runs test |
+| Cursor | [setup-cursor.md](prompts/setup-cursor.md) | Copies scripts + creates .cursor rule, runs test |
+| GitHub Copilot | [setup-copilot.md](prompts/setup-copilot.md) | Copies scripts + creates copilot-instructions, runs test |
+| ChatGPT / GPT-4 | [setup-chatgpt.md](prompts/setup-chatgpt.md) | System prompt for ops.json generation |
+| Any AI tool | [setup-universal.md](prompts/setup-universal.md) | Auto-detects tool, sets up accordingly |
+
+Already set up? Paste [integration-test.md](prompts/integration-test.md) to verify.
+
+---
+
 ## The ops.json Format
 
 ### Modern Format (preferred) — create, edit, and delete
@@ -614,6 +630,15 @@ CodeManifest/
 │   ├── test_validator.py          Validator tests (all 29 guards)
 │   └── test_executor.py           Executor tests (protected files, partial edits, etc.)
 │
+├── prompts/
+│   ├── README.md                  Which prompt for which tool
+│   ├── setup-claude-code.md       Full setup + test for Claude Code
+│   ├── setup-cursor.md            Full setup + test for Cursor
+│   ├── setup-copilot.md           Full setup + test for GitHub Copilot
+│   ├── setup-chatgpt.md           Setup for ChatGPT / GPT-4
+│   ├── setup-universal.md         Auto-detect tool, set up accordingly
+│   └── integration-test.md        Standalone post-setup verification
+│
 ├── examples/
 │   ├── sample/                    Real files the examples run against
 │   ├── 01-simple-edit.json        Single file, single edit (legacy format)
@@ -621,7 +646,8 @@ CodeManifest/
 │   └── 03-file-operations.json    File create + file delete (modern format)
 │
 ├── templates/
-│   └── CLAUDE.md.template         Drop into any project to activate the pattern
+│   ├── CLAUDE.md.template         Drop into any project to activate the pattern
+│   └── AGENTS.md.template         Universal AI instruction file (AGENTS.md standard)
 │
 ├── .github/workflows/ci.yml      CI: validate examples + run tests on Python 3.9/3.11/3.12
 │
