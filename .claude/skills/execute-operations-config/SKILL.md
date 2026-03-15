@@ -15,25 +15,35 @@ When this skill is invoked, you MUST:
 
 ---
 
-## Procedure
+## Step 0: Find the scripts
 
-### Step 1: Dry-run (mandatory)
+Look for `SCRIPTS_DIR` in `CLAUDE.md`. If not found, search for `validate-config-json.py`:
 
 ```bash
-python3 scripts/execute-json-ops.py <path-to-ops.json> --dry-run
+find . -name "validate-config-json.py" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
+```
+
+Use the directory where the scripts are found. Default: `scripts/`.
+
+---
+
+## Step 1: Dry-run (mandatory)
+
+```bash
+python3 <SCRIPTS_DIR>/execute-json-ops.py <path-to-ops.json> --dry-run
 ```
 
 Show output. If any issues, STOP.
 
-### Step 2: Execute
+## Step 2: Execute
 
 ```bash
-python3 scripts/execute-json-ops.py <path-to-ops.json>
+python3 <SCRIPTS_DIR>/execute-json-ops.py <path-to-ops.json>
 ```
 
 Show full output.
 
-### Step 3: Verify
+## Step 3: Verify
 
 Show the modified files to confirm changes applied:
 
@@ -41,13 +51,14 @@ Show the modified files to confirm changes applied:
 cat <each-modified-file>
 ```
 
-Run tests:
+Run the project's test command (check CLAUDE.md for the test command):
 
 ```bash
-python3 -m pytest tests/ -v
+# Default: python3 -m pytest tests/ -v
+# Or whatever is specified in CLAUDE.md
 ```
 
-### Step 4: Report
+## Step 4: Report
 
 ```
 [SKILL: execute-ops] Done
@@ -60,6 +71,6 @@ python3 -m pytest tests/ -v
 ## Rollback (if needed)
 
 ```bash
-python3 scripts/restore-backup.py --list
-python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp} --force
+python3 <SCRIPTS_DIR>/restore-backup.py --list
+python3 <SCRIPTS_DIR>/restore-backup.py --backup backups/{plan-name}-{timestamp} --force
 ```

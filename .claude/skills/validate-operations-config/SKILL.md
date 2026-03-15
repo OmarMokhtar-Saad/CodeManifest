@@ -14,12 +14,22 @@ When this skill is invoked, you MUST:
 
 ---
 
-## Procedure
+## Step 0: Find the scripts
 
-### Step 1: Run the automated validator
+Look for `SCRIPTS_DIR` in `CLAUDE.md`. If not found, search for `validate-config-json.py`:
 
 ```bash
-python3 scripts/validate-config-json.py <path-to-ops.json>
+find . -name "validate-config-json.py" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
+```
+
+Use the directory where the scripts are found. Default: `scripts/`.
+
+---
+
+## Step 1: Run the automated validator
+
+```bash
+python3 <SCRIPTS_DIR>/validate-config-json.py <path-to-ops.json>
 ```
 
 Show the full output.
@@ -27,10 +37,10 @@ Show the full output.
 - If `-> APPROVED`: proceed to Step 2
 - If `-> REJECTED`: print errors and STOP. Run `/generate-ops` again to fix.
 
-### Step 2: Run dry-run
+## Step 2: Run dry-run
 
 ```bash
-python3 scripts/execute-json-ops.py <path-to-ops.json> --dry-run
+python3 <SCRIPTS_DIR>/execute-json-ops.py <path-to-ops.json> --dry-run
 ```
 
 Show the full output. Confirm:
@@ -38,7 +48,7 @@ Show the full output. Confirm:
 - File paths are correct
 - No errors
 
-### Step 3: Report verdict
+## Step 3: Report verdict
 
 ```
 [SKILL: validate-ops] Result: APPROVED

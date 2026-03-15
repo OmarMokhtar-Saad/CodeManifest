@@ -14,14 +14,24 @@ When this skill is invoked, you MUST:
 
 ---
 
-## Procedure
+## Step 0: Find the scripts
 
-### Step 1: Read every target file
+Look for `SCRIPTS_DIR` in `CLAUDE.md`. If not found, search for `validate-config-json.py`:
+
+```bash
+find . -name "validate-config-json.py" -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null
+```
+
+Use the directory where the scripts are found for all commands. Default: `scripts/`.
+
+---
+
+## Step 1: Read every target file
 
 For every file you will edit, READ THE ENTIRE FILE FIRST.
 Copy the exact text for `find` patterns. Never guess. Never paraphrase.
 
-### Step 2: Create ops.json
+## Step 2: Create ops.json
 
 Create `operations/{plan-name}/ops.json` using the **MODERN format**:
 
@@ -43,7 +53,7 @@ Create `operations/{plan-name}/ops.json` using the **MODERN format**:
 }
 ```
 
-### Step 3: Self-check before finishing
+## Step 3: Self-check before finishing
 
 - [ ] Every `find` pattern was copied from an actual file read
 - [ ] `find` patterns are unique in their file (appear exactly once)

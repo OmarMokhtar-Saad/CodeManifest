@@ -5,23 +5,38 @@
 All implementation plans require an `ops.json` config file.
 Plans without ops.json are rejected. No exceptions.
 
+### Scripts Location
+
+```
+SCRIPTS_DIR: scripts/
+```
+
+The CodeManifest scripts are in `scripts/`. All commands below use this path.
+If you moved them to a different directory, update the path above.
+
 ### Workflow
 
-1. Validate: `python scripts/validate-config-json.py path/to/ops.json`
-2. Dry run:  `python scripts/execute-json-ops.py path/to/ops.json --dry-run`
-3. Execute:  `python scripts/execute-json-ops.py path/to/ops.json`
-4. Restore:  `python scripts/restore-backup.py --backup backups/<backup-dir>`
+1. Validate: `python3 scripts/validate-config-json.py path/to/ops.json`
+2. Dry run:  `python3 scripts/execute-json-ops.py path/to/ops.json --dry-run`
+3. Execute:  `python3 scripts/execute-json-ops.py path/to/ops.json`
+4. Restore:  `python3 scripts/restore-backup.py --backup backups/<backup-dir>`
 
 ### AI Role (MANDATORY)
 
 When asked to make any code change:
 1. Read every target file first
-2. Produce `ops.json` describing the exact changes
-3. Stop — do NOT write code directly
+2. Produce `ops.json` describing the exact changes using the MODERN format
+3. Run the validator and executor scripts — do NOT edit files directly
 
-Follow the `generate-operations-config` skill for the full format reference.
+### Slash Commands (Claude Code)
 
-### ops.json Format
+| Command | Purpose |
+|---------|---------|
+| `/generate-ops <task>` | Read files and create ops.json |
+| `/validate-ops <path>` | Run validator + dry-run |
+| `/execute-ops <path>` | Execute ops.json with backup |
+
+### ops.json Format (MODERN — preferred)
 
 ```json
 {
@@ -36,6 +51,16 @@ Follow the `generate-operations-config` skill for the full format reference.
           "replace": "replacement text"
         }
       ]
+    },
+    {
+      "type": "file_create",
+      "path": "src/new_module.py",
+      "content": "def new_function():\n    pass\n"
+    },
+    {
+      "type": "file_delete",
+      "path": "src/old_module.py",
+      "reason": "Replaced by new_module.py with improved implementation"
     }
   ]
 }
@@ -55,18 +80,16 @@ Follow the `generate-operations-config` skill for the full format reference.
 - No extra fields — schema uses `additionalProperties: false`
 - Protected files cannot be deleted (*.md, .gitignore, package.json, etc.)
 
-### Skills (Claude Code)
+### Test Command
 
-If using Claude Code, register these skills in `.claude/skills/`:
-
-| Trigger | Skill File | Purpose |
-|---|---|---|
-| Any code change request | `generate-operations-config.md` | AI produces ops.json |
-| Plan review | `validate-operations-config.md` | AI validates ops.json |
-| Plan execution | `execute-operations-config.md` | AI runs executor script |
-
-Skills are in `skills/` in the codemanifest repo.
-Copy them to `.claude/skills/<name>/SKILL.md` and register in `skills-registry.json`.
+```bash
+# TODO: Replace with your project's test command
+# Python:      python3 -m pytest tests/ -v
+# Node.js:     npm test
+# Java/Maven:  mvn test
+# Java/Gradle: ./gradlew test
+# Go:          go test ./...
+```
 
 ### Folder Structure
 

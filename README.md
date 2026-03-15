@@ -300,12 +300,30 @@ python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
 
 | What | Where it goes | Purpose |
 |---|---|---|
-| `scripts/` | `your-project/scripts/` | The 3 Python scripts + JSON schema (required) |
+| `scripts/` | `your-project/scripts/` (or any directory) | The 3 Python scripts + JSON schema (required) |
 | `.claude/skills/` | `your-project/.claude/skills/` | Slash commands for Claude Code (optional) |
 | `templates/CLAUDE.md.template` | `your-project/CLAUDE.md` | Project instructions for the AI (recommended) |
 
 The **scripts** are the core — they work standalone with any AI or no AI at all.
 The **skills** and **CLAUDE.md** teach the AI to use the scripts automatically.
+
+### How the AI finds the scripts
+
+You can put the scripts in any directory (`scripts/`, `tools/`, `utils/codemanifest/`, etc.).
+The AI finds them through this chain:
+
+1. **CLAUDE.md** — contains `SCRIPTS_DIR: scripts/` (edit this if you moved them)
+2. **Skills** — each skill reads `SCRIPTS_DIR` from CLAUDE.md before running commands
+3. **Auto-discovery fallback** — if CLAUDE.md doesn't specify, skills search for `validate-config-json.py` in the project
+4. **Instruction files** — for non-Claude tools, the paths are in the instruction file you write
+
+If you put the scripts in `tools/codemanifest/`, just update one line in CLAUDE.md:
+
+```
+SCRIPTS_DIR: tools/codemanifest/
+```
+
+All skills and commands will use that path.
 
 ---
 
