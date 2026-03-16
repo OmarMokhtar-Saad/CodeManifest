@@ -73,6 +73,13 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
                 errors.append(f"Operation {i} (file_delete): Path contains null bytes")
                 continue
 
+            # Path traversal check
+            if file_path:
+                rel = os.path.relpath(file_path)
+                if rel.startswith('..'):
+                    errors.append(f"Operation {i} (file_delete): Path traversal detected: {file_path}")
+                    continue
+
             # GUARD 12: File exists before deletion
             if file_path and not os.path.exists(file_path):
                 errors.append(f"Operation {i} (file_delete): Cannot delete non-existent file: {file_path}")
@@ -103,6 +110,13 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
             if file_path and '\x00' in file_path:
                 errors.append(f"Operation {i} (file_create): Path contains null bytes")
                 continue
+
+            # Path traversal check
+            if file_path:
+                rel = os.path.relpath(file_path)
+                if rel.startswith('..'):
+                    errors.append(f"Operation {i} (file_create): Path traversal detected: {file_path}")
+                    continue
 
             # GUARD 26: Null byte check on content
             if content and '\x00' in content:
@@ -428,7 +442,7 @@ def validate_modern_format(config: dict, errors: List[str]) -> Tuple[bool, List[
     return len(errors) == 0, errors
 
 
-def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
+def validate_backup_compatibility(config_file: str, config: dict = None) -> Tuple[bool, List[str]]:
     """
     Validate backup/restore compatibility (GUARDS 19-24).
 
@@ -439,14 +453,19 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
     - GUARD 22: Backup directory parent is writable
     - GUARD 23: File naming collision detection
     - GUARD 24: Nested directory path handling
+
+    Args:
+        config_file: Path to JSON config file (used only if config is None)
+        config: Pre-parsed config dict (avoids re-reading the file)
     """
     errors = []
 
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-    except Exception as e:
-        return False, [f"Cannot load config for backup validation: {e}"]
+    if config is None:
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except Exception as e:
+            return False, [f"Cannot load config for backup validation: {e}"]
 
     config_format = detect_config_format(config)
 
@@ -623,7 +642,13 @@ Safety Guards (29 total):
     is_valid, errors = validate_json_config(args.config)
 
     if is_valid:
-        backup_valid, backup_errors = validate_backup_compatibility(args.config)
+        # Pass pre-parsed config to avoid re-reading the file
+        try:
+            with open(args.config, 'r', encoding='utf-8') as f:
+                parsed_config = json.load(f)
+        except Exception:
+            parsed_config = None
+        backup_valid, backup_errors = validate_backup_compatibility(args.config, config=parsed_config)
         if not backup_valid:
             is_valid = False
             errors.extend(backup_errors)

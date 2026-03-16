@@ -84,6 +84,9 @@ def restore_from_backup(backup_dir, force=False, dry_run=False):
         # GUARD 11: Path traversal protection on manifest entries
         cwd = os.path.realpath(os.getcwd())
         for fp in files_to_restore + created_files:
+            if not isinstance(fp, str):
+                print(f"Error: Invalid entry in manifest (expected string): {fp!r}")
+                return False
             if os.path.isabs(fp):
                 print(f"Error: Absolute path in manifest: {fp}")
                 return False
@@ -174,7 +177,9 @@ def restore_from_backup(backup_dir, force=False, dry_run=False):
 
             # GUARD 12: Verify backup source stays inside backup directory
             real_backup_path = os.path.realpath(backup_path)
-            if not real_backup_path.startswith(real_backup_dir + os.sep):
+            try:
+                PurePath(real_backup_path).relative_to(real_backup_dir)
+            except ValueError:
                 print(f"Error: Backup source path escapes backup directory: {backup_path}")
                 return False
 
