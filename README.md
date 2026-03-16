@@ -4,29 +4,19 @@
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Cut AI coding costs by 77–92% by separating what AI does best (planning) from what Python does best (execution).**
-
-Instead of asking the AI to write code directly, you ask it to describe changes in a compact JSON file.
-A Python script executes those changes deterministically — with automatic backup, validation, and rollback built in.
-
-> Proven across 50+ production plans. Zero data loss. Every rollback worked.
-
----
+A declarative execution engine for AI-assisted code changes. The AI describes changes in a structured JSON file; Python applies them deterministically with validation, backup, and rollback.
 
 ## Table of Contents
 
-- [The Problem](#the-problem)
-- [The Solution](#the-solution)
+- [Overview](#overview)
+- [Why Use It](#why-use-it)
 - [How It Works](#how-it-works)
-- [Token Savings](#token-savings)
-- [Installation](#installation)
-- [Use in Your Project](#use-in-your-project)
-- [Quick Start (Try the Examples)](#quick-start-try-the-examples)
+- [Quick Start](#quick-start)
+- [Add to Your Project](#add-to-your-project)
 - [The ops.json Format](#the-opsjson-format)
 - [Scripts Reference](#scripts-reference)
-- [Recommended Workflow](#recommended-workflow)
-- [Integration Guide (Detailed)](#integration-guide-detailed)
-- [Why This Works Beyond Cost](#why-this-works-beyond-cost)
+- [Security](#security)
+- [Integration Guide](#integration-guide)
 - [Requirements](#requirements)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
@@ -34,35 +24,35 @@ A Python script executes those changes deterministically — with automatic back
 
 ---
 
-## The Problem
+## Overview
 
-Every developer using AI for code changes hits the same wall:
+CodeManifest separates **planning** (what the AI does) from **execution** (what Python does). Instead of letting an AI edit files directly, you have it produce a small JSON manifest (`ops.json`) describing the exact changes. A Python script then validates and applies those changes, with full backup and automatic rollback on failure.
 
-- The AI re-reads entire files on every request — even for a 3-line change
-- It re-reasons about context, writes the code, explains it, then you review it
-- A single bug fix burns 10,000–20,000 tokens
-- Multiply that across a real codebase and the cost compounds fast
+This is the same pattern used by infrastructure-as-code tools: declare the desired state, validate it, then execute it.
 
-The root cause: **the AI is doing both the thinking and the typing.** Only one of those needs to be expensive.
+```
+AI reads files + produces ops.json       Python validates + executes deterministically
+────────────────────────────────         ──────────────────────────────────────────────
+Thinks once, writes a plan               29-guard validation before any file is touched
+Costs ~2,500 tokens                      Backs up every file, applies changes in sequence
+Done.                                    Rolls back automatically on failure
+```
 
 ---
 
-## The Solution
+## Why Use It
 
-Give the AI one job: **describe the change in JSON.**
-Give Python the other job: **execute it.**
+**Reduced token usage.** The AI produces a compact JSON plan instead of rewriting entire files. In measured production use, this reduces token consumption by 77-92% compared to direct AI code editing.
 
-```
-AI (expensive, thinks once)         Python (free, runs deterministically)
-─────────────────────────           ──────────────────────────────────────
-Reads the files                     Validates the JSON (29 guards)
-Identifies exact find patterns      Backs up every touched file
-Writes ops.json                     Applies the changes
-Stops.                              Reports results / rolls back on failure
-```
+**Deterministic execution.** The `find` pattern must match the file content exactly. If the AI guessed wrong, the validator rejects the plan before any file is touched.
 
-The AI pays token cost once — for the planning phase.
-Execution costs zero AI tokens.
+**Safe by default.** Every modified or deleted file is backed up before changes. Operations run inside a transaction; if any step fails, all changes are rolled back automatically. Backups are never deleted.
+
+**Auditable.** Every ops.json is a reviewable artifact. Code review becomes reading a list of exact find-replace operations with predictable diffs.
+
+**Works with any AI tool.** The JSON format is model-agnostic. Setup prompts are provided for Claude Code, Cursor, GitHub Copilot, ChatGPT, Gemini, and others. The scripts also work without AI for manual use.
+
+**Works with any language.** The scripts operate on plain text files. Python, TypeScript, Java, Go, Swift, Kotlin, Ruby, or any other text-based codebase.
 
 ---
 
@@ -75,79 +65,74 @@ User request
 AI reads files + produces ops.json
      |
      v
-validate-config-json.py  ──── REJECTED (with fix suggestions)
+validate-config-json.py  ---- REJECTED (with fix suggestions)
      |
   APPROVED
      |
      v
 execute-json-ops.py
-  ├── backs up all target files
-  ├── writes manifest.json
-  ├── applies operations in sequence
-  └── rolls back automatically on any failure
+  |-- acquires execution lock
+  |-- backs up all target files
+  |-- writes manifest.json
+  |-- applies operations in sequence
+  |-- shows diff preview (in dry-run mode)
+  +-- rolls back automatically on any failure
      |
      v
 Changes applied. Backup preserved.
      |
-     v  (if anything went wrong)
-restore-backup.py  ──── full recovery in one command
+     v  (if recovery needed)
+restore-backup.py  ---- restores from backup in one command
 ```
 
 ---
 
-## Token Savings
-
-Measured on real production plans:
-
-| Approach | Tokens Used | Savings |
-|---|---|---|
-| AI writes code directly | ~15,000 | — |
-| Ops Config Pattern (execution only) | ~1,200 | **92% less** |
-| Full workflow (plan + validate + execute) | ~3,000 | **77% less** |
-
-The planning phase (AI reading files and writing ops.json) costs ~2,500 tokens.
-The execution phase (Python running the script) costs 0 tokens.
-
----
-
-## Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/OmarMokhtar-Saad/CodeManifest.git
 cd CodeManifest
 
-# Optional: enable JSON schema validation and tests
-pip3 install jsonschema pytest
+# Optional: enable JSON schema validation
+pip3 install jsonschema
+
+# Validate -> preview with diff -> execute
+python3 scripts/validate-config-json.py examples/04-modern-code-edit.json
+python3 scripts/execute-json-ops.py examples/04-modern-code-edit.json --dry-run
+python3 scripts/execute-json-ops.py examples/04-modern-code-edit.json
+
+# Run the test suite
+pip3 install pytest
+python3 -m pytest tests/ -v
 ```
 
-No pip install required for core functionality — everything runs on Python's standard library.
+The dry-run shows a unified diff of what would change, without modifying any files.
 
 ---
 
-## Use in Your Project
+## Add to Your Project
 
 ### Option A: One-prompt setup (recommended)
 
-Paste one of these prompts into your AI tool. It downloads the scripts, creates the right config files, and runs a verification test — all automatically.
+Paste one of these prompts into your AI tool. It downloads the scripts, creates the configuration files for your tool, and runs a verification test.
 
-| Your AI Tool | Prompt to paste | What it does |
-|---|---|---|
-| **Claude Code** | [setup-claude-code.md](prompts/setup-claude-code.md) | Downloads scripts + creates 3 skills + CLAUDE.md, runs integration test |
-| **Cursor** | [setup-cursor.md](prompts/setup-cursor.md) | Downloads scripts + creates `.cursor/rules/` config, runs integration test |
-| **GitHub Copilot** | [setup-copilot.md](prompts/setup-copilot.md) | Downloads scripts + creates `copilot-instructions.md`, runs integration test |
-| **ChatGPT / GPT-4** | [setup-chatgpt.md](prompts/setup-chatgpt.md) | System prompt that teaches ChatGPT to produce ops.json |
-| **Any AI tool** | [setup-universal.md](prompts/setup-universal.md) | Auto-detects your tool and sets up accordingly |
+| AI Tool | Prompt | What it sets up |
+|---------|--------|-----------------|
+| **Claude Code** | [setup-claude-code.md](prompts/setup-claude-code.md) | Scripts + 3 slash-command skills + CLAUDE.md |
+| **Cursor** | [setup-cursor.md](prompts/setup-cursor.md) | Scripts + `.cursor/rules/` config |
+| **GitHub Copilot** | [setup-copilot.md](prompts/setup-copilot.md) | Scripts + `copilot-instructions.md` |
+| **ChatGPT / GPT-4** | [setup-chatgpt.md](prompts/setup-chatgpt.md) | System prompt for ops.json generation |
+| **Any AI tool** | [setup-universal.md](prompts/setup-universal.md) | Auto-detects tool, configures accordingly |
 
-Each prompt is self-contained — it uses `curl` to download the scripts directly from GitHub, so you don't need to clone this repo into your project.
+Each prompt downloads scripts via `curl` from GitHub. You do not need to clone this repository into your project.
 
-Already set up? Paste [integration-test.md](prompts/integration-test.md) to verify everything works.
+Already set up? Run [integration-test.md](prompts/integration-test.md) to verify.
 
-### Option B: Manual setup (3 steps)
+### Option B: Manual setup
 
-**Step 1 — Copy the scripts into your project:**
+**1. Download the scripts:**
 
 ```bash
-# Download scripts (no need to clone the whole repo)
 mkdir -p scripts
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/validate-config-json.py -o scripts/validate-config-json.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/execute-json-ops.py -o scripts/execute-json-ops.py
@@ -155,9 +140,11 @@ curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/sc
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/operations-schema.json -o scripts/operations-schema.json
 ```
 
-**Step 2 — Tell your AI to use ops.json instead of editing files directly.**
+On systems without `curl`, use `wget` or clone the repo and copy the `scripts/` directory.
 
-Add this to your AI tool's instruction file (CLAUDE.md, `.cursor/rules/`, `.github/copilot-instructions.md`, or system prompt):
+**2. Configure your AI tool.**
+
+Add the following to your tool's instruction file (CLAUDE.md, `.cursor/rules/`, `.github/copilot-instructions.md`, or system prompt):
 
 ```
 All code changes must use the ops.json pattern. Do not edit files directly.
@@ -170,68 +157,27 @@ Workflow:
 5. Execute:  python3 scripts/execute-json-ops.py ops.json
 ```
 
-**Step 3 — Use it:**
+**3. Use it:**
 
 ```bash
-# AI creates ops.json, then you run:
-python3 scripts/validate-config-json.py operations/my-plan/ops.json   # Must say APPROVED
-python3 scripts/execute-json-ops.py operations/my-plan/ops.json --dry-run  # Preview
-python3 scripts/execute-json-ops.py operations/my-plan/ops.json            # Apply
+python3 scripts/validate-config-json.py operations/my-plan/ops.json       # Must say APPROVED
+python3 scripts/execute-json-ops.py operations/my-plan/ops.json --dry-run  # Preview with diff
+python3 scripts/execute-json-ops.py operations/my-plan/ops.json            # Apply changes
 
-# If anything went wrong:
+# If recovery is needed:
 python3 scripts/restore-backup.py --list
 python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
 ```
 
-That's it. See [Integration Guide (Detailed)](#integration-guide-detailed) below for tool-specific setup with skills, slash commands, and configuration.
-
----
-
-## Quick Start (Try the Examples)
-
-Want to see it in action before adding it to your project? Run the included examples:
-
-```bash
-git clone https://github.com/OmarMokhtar-Saad/CodeManifest.git
-cd CodeManifest
-
-# Validate → dry-run → execute
-python3 scripts/validate-config-json.py examples/01-simple-edit.json
-python3 scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
-python3 scripts/execute-json-ops.py examples/01-simple-edit.json
-
-# Run the test suite
-python3 -m pytest tests/ -v
-```
-
-Expected output:
-
-```
-Plan: simple-edit-example
-Format: LEGACY
-Operations: 1
-
-Backup directory: backups/simple-edit-example-20240101-120000
-
-[1/1] CODE_EDIT: examples/sample/app.py
-  Backed up to: backups/simple-edit-example-20240101-120000/...
-  Edit 1: Replaced pattern with 20 chars
-  Written 67 bytes, 1/1 edits applied
-
---------------------------------------------------
-EXECUTION COMPLETE
-Operations: 1 total
-  code_edit: 1
-Successful: 1
-Errors:     0
---------------------------------------------------
-```
+For tool-specific details (Claude Code skills, Cursor rules, Copilot instructions), see [Integration Guide](#integration-guide).
 
 ---
 
 ## The ops.json Format
 
-### Modern Format (preferred) — create, edit, and delete
+### Modern format (preferred)
+
+Supports `code_edit`, `file_create`, and `file_delete` operations:
 
 ```json
 {
@@ -243,7 +189,7 @@ Errors:     0
       "edits": [
         {
           "find": "def start():\n    setup()",
-          "replace": "def start():\n    logger.info('Application starting')\n    setup()"
+          "replace": "def start():\n    logger.info('Starting')\n    setup()"
         }
       ]
     },
@@ -261,7 +207,9 @@ Errors:     0
 }
 ```
 
-### Legacy Format — code edits only
+### Legacy format
+
+Supports code edits only. Use modern format for new projects:
 
 ```json
 {
@@ -270,49 +218,33 @@ Errors:     0
     {
       "path": "src/version.py",
       "edits": [
-        {
-          "find": "VERSION = \"1.0.0\"",
-          "replace": "VERSION = \"1.1.0\""
-        }
+        { "find": "VERSION = \"1.0.0\"", "replace": "VERSION = \"1.1.0\"" }
       ]
     }
   ]
 }
 ```
 
-Legacy format only supports code edits. Use modern format for file_create/file_delete.
+### Edit actions
 
-### Edit Actions
-
-| Action | What it does |
-|---|---|
+| Action | Description |
+|--------|-------------|
 | `replace` | Replace the matched text with new content |
-| `add_after` | Insert content immediately after the matched text |
-| `add_before` | Insert content immediately before the matched text |
-| `delete` | Remove the matched text entirely |
+| `add_after` | Insert content immediately after the match |
+| `add_before` | Insert content immediately before the match |
+| `delete` | Remove the matched text (set to `true`) |
 
-### Rules
+### Constraints
 
-| Rule | Value |
-|---|---|
-| Max operations per config | 5 |
-| Max file deletions per config | 3 |
-| `find` pattern occurrences in file | Exactly 1 (ambiguous = rejected) |
+| Rule | Limit |
+|------|-------|
+| Operations per config | 5 max (split into parts if more) |
+| File deletions per config | 3 max |
+| `find` pattern in file | Must appear exactly once |
 | Extra JSON fields | Not allowed (strict schema) |
-| Newlines in `find`/`replace` | Must use `\n` escape |
+| Newlines in strings | Use `\n` escape |
 
-### Splitting large plans
-
-If a task requires more than 5 operations, split into numbered parts:
-
-```
-operations/
-  my-plan/
-    part1-ops.json    (operations 1-5)
-    part2-ops.json    (operations 6-10)
-```
-
-Execute in order: `part1` first, then `part2`.
+For plans exceeding 5 operations, split into `part1-ops.json`, `part2-ops.json`, and execute in order.
 
 ---
 
@@ -320,346 +252,118 @@ Execute in order: `part1` first, then `part2`.
 
 ### `validate-config-json.py`
 
-Runs 29 safety guards before any file is touched. Returns exit code 0 (approved) or 1 (rejected with errors).
+Pre-flight validator with 29 safety guards. Returns exit code 0 (approved) or 1 (rejected with actionable errors).
 
 ```bash
 python3 scripts/validate-config-json.py path/to/ops.json
 ```
 
-**Guard categories:**
-
-| Category | Guards | What they check |
-|---|---|---|
-| Code editing | 11 | File existence, JSON syntax, required fields, find pattern exists in file, ambiguous match detection |
-| File operations | 7 | Overwrite protection, protected file check, parent directory existence, deletion reason, directory check |
-| Backup safety | 6 | Path format consistency, path reconstruction, filename collision detection, nested directory handling |
-| Security | 5 | Null byte rejection in paths and content, file size limits, operation type validation |
+| Guard category | Count | Checks |
+|----------------|-------|--------|
+| Code editing | 11 | File existence, JSON syntax, required fields, pattern exists in file, ambiguous match detection |
+| File operations | 7 | Overwrite protection, protected files, deletion reason, parent directory, max deletions |
+| Backup safety | 6 | Path format, path reconstruction, plan name safety, collision detection, nested paths |
+| Security | 5 | Null byte rejection, file size limit (2 MB), operation type validation |
 
 ### `execute-json-ops.py`
 
-Safe executor with automatic backup before every operation.
+Transactional executor with automatic backup, diff preview, and rollback.
 
 ```bash
-# Preview changes without touching any files
-python3 scripts/execute-json-ops.py path/to/ops.json --dry-run
-
-# Apply changes
-python3 scripts/execute-json-ops.py path/to/ops.json
+python3 scripts/execute-json-ops.py path/to/ops.json --dry-run   # Preview with diff
+python3 scripts/execute-json-ops.py path/to/ops.json              # Apply changes
 ```
 
-**What it does automatically:**
-- Creates `backups/{plan-name}-{timestamp}/` before any changes
-- Backs up every file it will modify or delete
-- Writes a `manifest.json` listing all backed-up files
-- Applies all operations in sequence
-- Rolls back automatically if any operation fails
+**Behavior:**
+- Acquires an execution lock to prevent concurrent runs
+- Creates `backups/{plan-name}-{timestamp}/` with a manifest
+- Backs up every file before modification or deletion
+- Shows a unified diff preview during `--dry-run`
+- Applies operations in sequence within a transaction
+- Rolls back all changes automatically if any operation fails
 
 ### `restore-backup.py`
 
-One-command recovery with 10 safety guards.
+One-command recovery with 12 safety guards.
 
 ```bash
-# List all available backups
-python3 scripts/restore-backup.py --list
-
-# Restore with confirmation prompt
-python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000
-
-# Restore without prompt (CI/automation)
-python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000 --force
+python3 scripts/restore-backup.py --list                                       # List backups
+python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000     # Restore
+python3 scripts/restore-backup.py --backup backups/my-plan-20240101-120000 --force  # Skip prompt
 ```
 
-The restore script never deletes backups — they are preserved as an audit trail.
+Backups are never deleted automatically. They serve as an audit trail.
 
 ---
 
-## Recommended Workflow
+## Security
 
-```bash
-# 1. Validate
-python3 scripts/validate-config-json.py operations/my-plan/ops.json
+The executor enforces path confinement, rejecting any operation that resolves outside the project root (including through symlinked parent directories). Null bytes in paths and content are rejected. Protected files (`.gitignore`, `*.md`, `Makefile`, `Dockerfile`, `requirements.txt`, `package.json`, `pyproject.toml`, and others) cannot be deleted.
 
-# 2. Preview (no files touched)
-python3 scripts/execute-json-ops.py operations/my-plan/ops.json --dry-run
+The validator should always run before the executor. The full 29-guard validation (max operations, file size limits, ambiguous match detection) is enforced by the validator. The executor includes path validation and protected-file checks, but relies on the validator for the complete safety model.
 
-# 3. Execute
-python3 scripts/execute-json-ops.py operations/my-plan/ops.json
-
-# 4. Run your tests
-# pytest / npm test / ./gradlew test / go test ./... etc.
-
-# 5. If something went wrong — full recovery in one command
-python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
-```
+For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ---
 
-## Integration Guide (Detailed)
-
-### What you're copying
-
-| What | Where it goes | Purpose |
-|---|---|---|
-| `scripts/` | `your-project/scripts/` (or any directory) | The 3 Python scripts + JSON schema (required) |
-| `.claude/skills/` | `your-project/.claude/skills/` | Slash commands for Claude Code (optional) |
-| `templates/CLAUDE.md.template` | `your-project/CLAUDE.md` | Project instructions for the AI (recommended) |
-
-The **scripts** are the core — they work standalone with any AI or no AI at all.
-The **skills** and **CLAUDE.md** teach the AI to use the scripts automatically.
-
-### How the AI finds the scripts
-
-You can put the scripts in any directory (`scripts/`, `tools/`, `utils/codemanifest/`, etc.).
-The AI finds them through this chain:
-
-1. **CLAUDE.md** — contains `SCRIPTS_DIR: scripts/` (edit this if you moved them)
-2. **Skills** — each skill reads `SCRIPTS_DIR` from CLAUDE.md before running commands
-3. **Auto-discovery fallback** — if CLAUDE.md doesn't specify, skills search for `validate-config-json.py` in the project
-4. **Instruction files** — for non-Claude tools, the paths are in the instruction file you write
-
-If you put the scripts in `tools/codemanifest/`, just update one line in CLAUDE.md:
-
-```
-SCRIPTS_DIR: tools/codemanifest/
-```
-
-All skills and commands will use that path.
-
----
+## Integration Guide
 
 ### Claude Code
 
-**Setup (3 minutes):**
-
 ```bash
-# From inside the CodeManifest repo:
 cp -r scripts/ your-project/scripts/
 cp -r .claude/ your-project/.claude/
 cp templates/CLAUDE.md.template your-project/CLAUDE.md
-# Edit CLAUDE.md: fill in your project name and test command
+# Edit CLAUDE.md with your project name and test command
 ```
 
-**What you get — 3 slash commands:**
-
-| Command | What it does |
-|---|---|
-| `/generate-ops <task>` | AI reads target files, creates `operations/{plan}/ops.json` |
-| `/validate-ops <path>` | Runs `validate-config-json.py` + dry-run, reports APPROVED/REJECTED |
-| `/execute-ops <path>` | Runs dry-run, real execution, verifies with tests |
-
-Each prints `[SKILL: name]` tags so you can verify the skill was invoked.
-
-**How to use:**
-
-```
-You: "Add logging to src/app.py"
-
-Claude automatically:
-1. /generate-ops → reads files, creates operations/add-logging/ops.json
-2. /validate-ops → runs validator, reports APPROVED
-3. /execute-ops → dry-run, execute, verify with tests
-```
-
-Or invoke each step manually: type `/generate-ops` in Claude Code's prompt.
-
----
+Provides three slash commands: `/generate-ops`, `/validate-ops`, `/execute-ops`.
 
 ### Cursor
 
-**Setup:**
-
 ```bash
 cp -r scripts/ your-project/scripts/
 ```
 
-Create `.cursor/rules/ops-config.mdc` in your project:
-
-```markdown
----
-description: Use ops.json pattern for all code changes
-globs: **/*
-alwaysApply: true
----
-
-When asked to make ANY code change:
-
-1. Read every target file first
-2. Create an ops.json file with this format:
-   {
-     "plan": "plan-name",
-     "operations": [
-       {"type": "code_edit", "path": "file.py", "edits": [{"find": "exact text", "replace": "new text"}]}
-     ]
-   }
-3. Run: python3 scripts/validate-config-json.py ops.json
-4. Run: python3 scripts/execute-json-ops.py ops.json --dry-run
-5. Run: python3 scripts/execute-json-ops.py ops.json
-
-Do NOT edit files directly. Always use ops.json.
-```
-
----
+Create `.cursor/rules/ops-config.mdc` with the ops.json workflow instructions. See [setup-cursor.md](prompts/setup-cursor.md) for the full file content.
 
 ### GitHub Copilot
 
-**Setup:**
-
 ```bash
 cp -r scripts/ your-project/scripts/
 ```
 
-Create `.github/copilot-instructions.md` in your project:
+Create `.github/copilot-instructions.md` with the ops.json workflow. See [setup-copilot.md](prompts/setup-copilot.md) for the full file content.
 
-```markdown
-## Code Change Instructions
+### ChatGPT / Gemini / Other tools
 
-All code changes must use the ops.json pattern. Do not edit files directly.
+Copy `scripts/` into your project. Add the ops.json workflow to your system prompt or custom instructions. See [setup-chatgpt.md](prompts/setup-chatgpt.md) for a ready-to-use prompt.
 
-Workflow:
-1. Read every target file first
-2. Produce an ops.json describing changes in this format:
-   - "plan": plan name
-   - "operations": array of {"type": "code_edit"/"file_create"/"file_delete", "path": "...", ...}
-   - For edits: {"find": "exact text from file", "replace": "new text"}
-3. Run: python3 scripts/validate-config-json.py <ops.json>
-4. Run: python3 scripts/execute-json-ops.py <ops.json> --dry-run
-5. Run: python3 scripts/execute-json-ops.py <ops.json>
+ChatGPT and Gemini produce the ops.json; you run the scripts locally.
 
-Rules:
-- find pattern must match EXACTLY (copy from file, don't guess)
-- find pattern must appear exactly once in the file
-- Max 5 operations per config
-- Use \n for newlines in JSON strings
-```
+### Without AI
 
----
-
-### ChatGPT / GPT-4 / GPT-4o
-
-**Setup:** Copy `scripts/` into your project. Then add this to your **Custom Instructions** or **System Prompt**:
-
-```
-You are a code change planner. When asked to implement changes:
-
-1. Ask the user to paste the contents of each target file
-2. Produce an ops.json file describing the exact changes:
-   {
-     "plan": "plan-name",
-     "operations": [
-       {
-         "type": "code_edit",
-         "path": "relative/path/to/file",
-         "edits": [{"find": "exact text from file", "replace": "new text"}]
-       }
-     ]
-   }
-3. Tell the user to run:
-   python3 scripts/validate-config-json.py ops.json
-   python3 scripts/execute-json-ops.py ops.json --dry-run
-   python3 scripts/execute-json-ops.py ops.json
-
-Rules:
-- "find" must be copied EXACTLY from the file (preserve whitespace)
-- "find" must appear exactly once in the file
-- Use \n for newlines, \t for tabs in JSON strings
-- Max 5 operations per config
-- For file creation: {"type": "file_create", "path": "...", "content": "..."}
-- For file deletion: {"type": "file_delete", "path": "...", "reason": "min 10 chars"}
-```
-
-**Note:** ChatGPT can't run the scripts — it produces the ops.json, you run the scripts locally.
-
----
-
-### Google Gemini
-
-**Setup:** Same as ChatGPT. Add the same instructions to your Gemini system prompt or Google AI Studio instructions. Gemini produces ops.json, you run the scripts locally.
-
----
-
-### Windsurf / Aider / Other AI coding tools
-
-**Setup:**
+The scripts work standalone. Write ops.json by hand and run the three commands:
 
 ```bash
-cp -r scripts/ your-project/scripts/
-```
-
-Create a `.ai-instructions` or equivalent config file with:
-
-```
-All code changes use the ops.json pattern.
-Do NOT edit files directly. Produce ops.json instead.
-
-Format:
-{"plan": "name", "operations": [{"type": "code_edit", "path": "file", "edits": [{"find": "exact", "replace": "new"}]}]}
-
-After creating ops.json, run:
 python3 scripts/validate-config-json.py ops.json
-python3 scripts/execute-json-ops.py ops.json
-```
-
-The instruction file name varies by tool — check your tool's docs for where to put system instructions.
-
----
-
-### No AI — manual usage
-
-The scripts work without any AI. Write ops.json by hand:
-
-```bash
-# 1. Create ops.json manually
-cat > ops.json << 'EOF'
-{
-  "plan": "my-change",
-  "operations": [
-    {
-      "type": "code_edit",
-      "path": "src/app.py",
-      "edits": [{"find": "old_value = 1", "replace": "old_value = 2"}]
-    }
-  ]
-}
-EOF
-
-# 2. Validate
-python3 scripts/validate-config-json.py ops.json
-
-# 3. Execute
 python3 scripts/execute-json-ops.py ops.json --dry-run
 python3 scripts/execute-json-ops.py ops.json
 ```
 
 ---
 
-## Why This Works Beyond Cost
-
-**Deterministic** — The `find` pattern is exact. If the AI guessed wrong, the validator rejects it before any file is touched. No "AI interpreted my intent slightly wrong" surprises after the fact.
-
-**Auditable** — Every ops.json is a file in version control. Code review is reading a list of exact find-replace operations. Diffs are predictable.
-
-**Reversible** — Full backup before every change. Restore any plan in one command. The backup is never deleted automatically.
-
-**Composable** — Chain multiple ops.json files for large refactors. Each part executes atomically with its own backup. One part failing does not corrupt others.
-
-**LLM-agnostic** — The pattern works with any instruction-following model. Claude, GPT-4, Gemini, Cursor, Copilot Workspace — the ops.json format is plain JSON.
-
-**Language-agnostic** — The scripts operate on plain text files. Java, Python, TypeScript, Go, Swift, Kotlin, Ruby — any text-based codebase works.
-
----
-
 ## Requirements
 
 | Requirement | Notes |
-|---|---|
-| Python 3.6+ | No external packages required |
-| Any OS | macOS, Linux, Windows — cross-platform path handling |
-| `jsonschema` | Optional. Enables strict schema validation. `pip3 install jsonschema` |
+|-------------|-------|
+| Python 3.9+ | No external packages required for core functionality |
+| macOS / Linux | Full support including file locking via `fcntl` |
+| Windows | Scripts run; execution locking is not enforced (no `fcntl`) |
+| `jsonschema` | Optional. Enables strict JSON schema validation. `pip3 install jsonschema` |
 | `pytest` | Optional. For running the test suite. `pip3 install pytest` |
 
-**Zero npm. Zero pip installs for core functionality.** Everything runs on Python's standard library.
-
-**CI tested:** Python 3.9, 3.11, 3.12, 3.13 on Ubuntu. 80+ tests, 77% coverage.
+**CI tested:** Python 3.9, 3.11, 3.12, 3.13 on Ubuntu with ruff linting, 115 tests, minimum 75% coverage enforced.
 
 ---
 
@@ -668,62 +372,55 @@ python3 scripts/execute-json-ops.py ops.json
 ```
 CodeManifest/
 ├── scripts/
-│   ├── validate-config-json.py    29-guard pre-flight validator
-│   ├── execute-json-ops.py        Safe executor with auto-backup + manifest
-│   ├── restore-backup.py          One-command recovery with 10 safety guards
-│   └── operations-schema.json     Strict JSON Schema (used by validator)
+│   ├── validate-config-json.py      29-guard pre-flight validator
+│   ├── execute-json-ops.py          Transactional executor with backup + diff preview
+│   ├── restore-backup.py            One-command recovery (12 safety guards)
+│   └── operations-schema.json       Strict JSON schema (used by validator)
 │
-├── .claude/skills/                Claude Code slash commands (copy to your project)
-│   ├── generate-operations-config/SKILL.md   /generate-ops — AI produces ops.json
-│   ├── validate-operations-config/SKILL.md   /validate-ops — AI validates ops.json
-│   └── execute-operations-config/SKILL.md    /execute-ops  — AI runs executor
-│
-├── skills/                        Generic skill files (for any LLM)
-│   ├── generate-operations-config.md
-│   ├── validate-operations-config.md
-│   └── execute-operations-config.md
-│
-├── tests/                         80 tests, 77% coverage
-│   ├── conftest.py                Shared fixtures
-│   ├── test_validator.py          Validator tests (all 29 guards)
-│   └── test_executor.py           Executor tests (protected files, partial edits, etc.)
-│
-├── prompts/
-│   ├── README.md                  Which prompt for which tool
-│   ├── setup-claude-code.md       Full setup + test for Claude Code
-│   ├── setup-cursor.md            Full setup + test for Cursor
-│   ├── setup-copilot.md           Full setup + test for GitHub Copilot
-│   ├── setup-chatgpt.md           Setup for ChatGPT / GPT-4
-│   ├── setup-universal.md         Auto-detect tool, set up accordingly
-│   └── integration-test.md        Standalone post-setup verification
+├── tests/                           115 tests across 4 files
+│   ├── conftest.py                  Shared fixtures
+│   ├── test_validator.py            Validator tests (all 29 guards)
+│   ├── test_executor.py             Executor tests (edits, rollback, lock, diff, paths)
+│   ├── test_restore.py              Restore tests (guards, path traversal, round-trip)
+│   └── test_integration.py          End-to-end: validate -> execute -> restore
 │
 ├── examples/
-│   ├── sample/                    Real files the examples run against
-│   ├── 01-simple-edit.json        Single file, single edit (legacy format)
-│   ├── 02-multi-file-edit.json    Two files, two edits (legacy format)
-│   └── 03-file-operations.json    File create + file delete (modern format)
+│   ├── sample/                      Files the examples operate on
+│   ├── 01-simple-edit.json          Single edit, legacy format
+│   ├── 02-multi-file-edit.json      Two files, legacy format
+│   ├── 03-file-operations.json      File create + delete, modern format
+│   └── 04-modern-code-edit.json     Code edit, modern format
 │
-├── templates/
-│   ├── CLAUDE.md.template         Drop into any project to activate the pattern
-│   └── AGENTS.md.template         Universal AI instruction file (AGENTS.md standard)
+├── prompts/                         One-prompt setup for each AI tool
+│   ├── setup-claude-code.md
+│   ├── setup-cursor.md
+│   ├── setup-copilot.md
+│   ├── setup-chatgpt.md
+│   ├── setup-universal.md
+│   └── integration-test.md
 │
-├── .github/workflows/ci.yml      CI: validate examples + run tests on Python 3.9/3.11/3.12
+├── .claude/skills/                  Claude Code slash commands
+├── skills/                          Generic skill files (any LLM)
+├── templates/                       CLAUDE.md and AGENTS.md templates
 │
-└── CLAUDE.md                      Project context for AI-assisted development
+├── .github/workflows/ci.yml        CI on Python 3.9/3.11/3.12/3.13 + ruff
+├── LICENSE                          MIT
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── CODE_OF_CONDUCT.md
+└── CLAUDE.md                        Project context for AI-assisted development
 ```
-
----
-
-## License
-
-MIT — use freely in personal and commercial projects.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-This repo dogfoods its own pattern — contributions use ops.json for code changes.
+This repository uses its own ops.json pattern for code changes. For security issues, see [SECURITY.md](SECURITY.md).
 
-For security issues, see [SECURITY.md](SECURITY.md).
+---
+
+## License
+
+[MIT](LICENSE)

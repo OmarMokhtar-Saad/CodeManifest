@@ -5,7 +5,7 @@ restore-backup.py - Restore files from backup
 Purpose: Restore files from a previous backup (manual recovery)
 Usage: python3 scripts/restore-backup.py --backup backups/<backup_dir> [--force] [--dry-run]
 
-Safety Guards (10 total):
+Safety Guards (12 total):
   GUARD 1:  Backup directory existence
   GUARD 2:  Backup directory is a directory
   GUARD 3:  Manifest file existence
@@ -16,6 +16,8 @@ Safety Guards (10 total):
   GUARD 8:  Restoration verification
   GUARD 9:  Partial restoration handling
   GUARD 10: Backup preservation (never deletes backups)
+  GUARD 11: Path traversal protection on manifest entries
+  GUARD 12: Backup source path confinement
 """
 
 import argparse
