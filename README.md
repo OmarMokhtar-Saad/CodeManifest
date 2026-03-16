@@ -1,4 +1,8 @@
-# AI Ops Config Pattern
+# CodeManifest
+
+![CI](https://github.com/OmarMokhtar-Saad/CodeManifest/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 **Cut AI coding costs by 77–92% by separating what AI does best (planning) from what Python does best (execution).**
 
@@ -6,6 +10,28 @@ Instead of asking the AI to write code directly, you ask it to describe changes 
 A Python script executes those changes deterministically — with automatic backup, validation, and rollback built in.
 
 > Proven across 50+ production plans. Zero data loss. Every rollback worked.
+
+---
+
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [How It Works](#how-it-works)
+- [Token Savings](#token-savings)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Ready-to-Paste Setup Prompts](#ready-to-paste-setup-prompts)
+- [The ops.json Format](#the-opsjson-format)
+- [Scripts Reference](#scripts-reference)
+- [Recommended Workflow](#recommended-workflow)
+- [Integration Guide](#integration-guide)
+- [Adopting in Your Project — Summary](#adopting-in-your-project--summary)
+- [Why This Works Beyond Cost](#why-this-works-beyond-cost)
+- [Requirements](#requirements)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -85,15 +111,23 @@ The execution phase (Python running the script) costs 0 tokens.
 
 ---
 
-## Quick Start
+## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/OmarMokhtar-Saad/CodeManifest.git
 cd CodeManifest
 
 # Optional: enable JSON schema validation and tests
 pip3 install jsonschema pytest
+```
+
+No pip install required for core functionality — everything runs on Python's standard library.
+
+---
+
+## Quick Start
+
+```bash
 
 # Try the examples (they run against real files in examples/sample/)
 python3 scripts/validate-config-json.py examples/01-simple-edit.json
@@ -601,7 +635,7 @@ python3 scripts/execute-json-ops.py ops.json
 
 **Zero npm. Zero pip installs for core functionality.** Everything runs on Python's standard library.
 
-**CI tested:** Python 3.9, 3.11, 3.12 on Ubuntu. 80 tests, 77% coverage.
+**CI tested:** Python 3.9, 3.11, 3.12, 3.13 on Ubuntu. 80+ tests, 77% coverage.
 
 ---
 
@@ -664,7 +698,8 @@ MIT — use freely in personal and commercial projects.
 
 ## Contributing
 
-The scripts, skills, and examples are all plain text files.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 This repo dogfoods its own pattern — contributions use ops.json for code changes.
 
-See `CLAUDE.md` for the development workflow.
+For security issues, see [SECURITY.md](SECURITY.md).

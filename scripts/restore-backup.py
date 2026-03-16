@@ -21,6 +21,7 @@ Safety Guards (10 total):
 import argparse
 import json
 import os
+from pathlib import PurePath
 import shutil
 import sys
 
@@ -78,13 +79,18 @@ def restore_from_backup(backup_dir, force=False, dry_run=False):
         # GUARD 11: Path traversal protection on manifest entries
         cwd = os.path.realpath(os.getcwd())
         for fp in files_to_restore + created_files:
-            resolved = os.path.realpath(fp)
-            if not resolved.startswith(cwd + os.sep) and resolved != cwd:
-                print(f"Error: Path traversal detected in manifest: {fp}")
-                print("Manifest may have been tampered with.")
-                return False
             if os.path.isabs(fp):
                 print(f"Error: Absolute path in manifest: {fp}")
+                return False
+            if '\x00' in fp:
+                print(f"Error: Path contains null bytes in manifest: {fp!r}")
+                return False
+            resolved = os.path.realpath(fp)
+            try:
+                PurePath(resolved).relative_to(cwd)
+            except ValueError:
+                print(f"Error: Path traversal detected in manifest: {fp}")
+                print("Manifest may have been tampered with.")
                 return False
 
         if not files_to_restore and not created_files:

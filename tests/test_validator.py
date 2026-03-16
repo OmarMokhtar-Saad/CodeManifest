@@ -758,8 +758,8 @@ class TestEdgeCases:
         valid, errors = validator.validate_json_config(str(p))
         assert not valid
 
-    def test_file_create_parent_missing(self, tmp_project, monkeypatch):
-        """GUARD 17: Parent directory doesn't exist."""
+    def test_file_create_parent_missing_is_warning(self, tmp_project, monkeypatch, capsys):
+        """GUARD 17: Parent directory doesn't exist — now a warning, not an error."""
         monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
         config = {
             "plan": "test",
@@ -770,7 +770,10 @@ class TestEdgeCases:
         p = tmp_project / "ops.json"
         p.write_text(json.dumps(config))
         valid, errors = validator.validate_json_config(str(p))
-        assert not valid
+        assert valid
+        captured = capsys.readouterr()
+        assert "Warning" in captured.out
+        assert "Parent directory" in captured.out
 
     def test_too_many_deletions(self, tmp_project, monkeypatch):
         """GUARD 15: Max 3 deletions per config."""

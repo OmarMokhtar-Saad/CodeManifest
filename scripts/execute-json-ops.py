@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-execute-json-ops.py - Execute JSON operations config (v2.2)
+execute-json-ops.py - Execute JSON operations config (v2.3)
 
 Purpose: Execute file create, delete, and code edit operations
 Usage: python3 scripts/execute-json-ops.py path/to/ops.json [--dry-run]
@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Protected file patterns (cannot be deleted via ops config)
@@ -64,6 +65,27 @@ def is_protected_file(file_path: str) -> bool:
     return False
 
 
+def validate_path(file_path: str) -> bool:
+    """
+    Validate file path for safety.
+    Rejects path traversal and null bytes.
+    """
+    if '\x00' in file_path:
+        print(f"  BLOCKED: Path contains null bytes: {file_path!r}")
+        return False
+    rel = os.path.relpath(file_path)
+    if rel.startswith('..'):
+        print(f"  BLOCKED: Path traversal detected: {file_path}")
+        return False
+    if os.path.islink(file_path):
+        resolved = os.path.realpath(file_path)
+        cwd = os.path.realpath(os.getcwd())
+        if not resolved.startswith(cwd + os.sep):
+            print(f"  BLOCKED: Symlink points outside project: {file_path} -> {resolved}")
+            return False
+    return True
+
+
 def normalize_config(config: dict) -> dict:
     """
     Convert legacy format to modern format for unified processing.
@@ -88,8 +110,12 @@ def normalize_config(config: dict) -> dict:
     }
 
 
-def create_manifest(backup_dir: Path, plan_name: str, files_to_backup: List[str], files_to_create: List[str]) -> None:
-    """Create manifest.json for backup compatibility with restore-backup.py."""
+def create_manifest(backup_dir: Path, plan_name: str, files_to_backup: List[str], files_to_create: List[str]) -> bool:
+    """Create manifest.json for backup compatibility with restore-backup.py.
+
+    Returns:
+        True if manifest was created successfully, False otherwise.
+    """
     manifest = {
         'plan': plan_name,
         'timestamp': datetime.now().isoformat(),
@@ -102,8 +128,11 @@ def create_manifest(backup_dir: Path, plan_name: str, files_to_backup: List[str]
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2)
         print(f"  Manifest: {manifest_path}")
+        return True
     except Exception as e:
-        print(f"  Warning: Could not create manifest: {e}")
+        print(f"  Error: Could not create manifest: {e}")
+        print("  Aborting execution — backup manifest is required for safe recovery.")
+        return False
 
 
 def execute_file_create(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple[bool, str]:
@@ -111,16 +140,21 @@ def execute_file_create(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
     file_path = Path(operation['path'])
     content = operation['content']
 
+    if not validate_path(str(file_path)):
+        return False, "path-validation-failed"
+
+    byte_size = len(content.encode('utf-8'))
+
     if dry_run:
         print(f"  [DRY RUN] Would create: {file_path}")
-        print(f"            Size: {len(content)} bytes, Lines: {content.count(chr(10)) + 1}")
+        print(f"            Size: {byte_size} bytes, Lines: {content.count(chr(10)) + 1}")
         return True, "dry-run"
 
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding='utf-8')
         print(f"  Created: {file_path}")
-        print(f"  Size: {len(content)} bytes, Lines: {content.count(chr(10)) + 1}")
+        print(f"  Size: {byte_size} bytes, Lines: {content.count(chr(10)) + 1}")
         return True, "created"
     except Exception as e:
         print(f"  Error creating file: {e}")
@@ -131,6 +165,9 @@ def execute_file_delete(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
     """Back up then delete specified file."""
     file_path = Path(operation['path'])
     reason = operation.get('reason', '')
+
+    if not validate_path(str(file_path)):
+        return False, "path-validation-failed"
 
     # Check protected file patterns
     if is_protected_file(str(file_path)):
@@ -148,13 +185,19 @@ def execute_file_delete(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
         print(f"  File already deleted: {file_path}")
         return True, "already-deleted"
 
+    # Backup before deletion
     try:
         rel_path = Path(os.path.relpath(file_path))
         backup_path = backup_dir / rel_path
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(file_path), str(backup_path))
         print(f"  Backed up to: {backup_path}")
+    except Exception as e:
+        print(f"  Error backing up file before deletion: {e}")
+        print("  Aborting delete — cannot proceed without backup.")
+        return False, str(e)
 
+    try:
         file_size = file_path.stat().st_size
         file_path.unlink()
 
@@ -172,17 +215,25 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
     file_path = Path(operation['path'])
     edits = operation.get('edits', [])
 
+    if not validate_path(str(file_path)):
+        return False, "path-validation-failed"
+
     if not file_path.exists():
         print(f"  File not found: {file_path}")
         return False, "file-not-found"
 
     # Backup original (preserve directory structure)
     if not dry_run:
-        rel_path = Path(os.path.relpath(file_path))
-        backup_path = backup_dir / rel_path
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(str(file_path), str(backup_path))
-        print(f"  Backed up to: {backup_path}")
+        try:
+            rel_path = Path(os.path.relpath(file_path))
+            backup_path = backup_dir / rel_path
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(str(file_path), str(backup_path))
+            print(f"  Backed up to: {backup_path}")
+        except Exception as e:
+            print(f"  Error backing up file: {e}")
+            print("  Aborting edit — cannot proceed without backup.")
+            return False, str(e)
 
     try:
         content = file_path.read_text(encoding='utf-8')
@@ -225,7 +276,7 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
             print(f"  Edit {j}: Replaced pattern with {len(edit['replace'])} chars")
             edits_applied += 1
 
-        elif 'delete' in edit:
+        elif edit.get('delete'):
             modified_content = modified_content.replace(find_pattern, '', 1)
             print(f"  Edit {j}: Deleted pattern")
             edits_applied += 1
@@ -239,13 +290,21 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
         )
         print(f"  WARNING: Only {edits_applied}/{len(edits)} edits applied")
 
+    if edits_applied == 0 and len(edits) > 0:
+        print(f"  FAILED: No edits could be applied")
+        return False, "no-edits-applied"
+
+    byte_size = len(modified_content.encode('utf-8'))
+
     if dry_run:
-        print(f"  [DRY RUN] Would write {len(modified_content)} bytes to: {file_path}")
+        print(f"  [DRY RUN] Would write {byte_size} bytes to: {file_path}")
         return True, "dry-run"
     else:
         try:
             file_path.write_text(modified_content, encoding='utf-8')
-            print(f"  Written {len(modified_content)} bytes, {edits_applied}/{len(edits)} edits applied")
+            print(f"  Written {byte_size} bytes, {edits_applied}/{len(edits)} edits applied")
+            if edits_applied < len(edits):
+                return False, "partial-edits"
             return True, "edited"
         except Exception as e:
             print(f"  Error writing file: {e}")
@@ -285,7 +344,7 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
         print()
 
     # Create backup directory (sanitize plan name for safe filesystem path)
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     safe_plan_name = re.sub(r'[^a-zA-Z0-9_-]', '_', plan_name)
     backup_dir = Path("backups") / f"{safe_plan_name}-{timestamp}"
 
@@ -306,7 +365,8 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
             files_to_create.append(os.path.relpath(file_path))
 
     if not dry_run:
-        create_manifest(backup_dir, plan_name, files_to_backup, files_to_create)
+        if not create_manifest(backup_dir, plan_name, files_to_backup, files_to_create):
+            return False
         print()
 
     # Execute operations
@@ -386,7 +446,7 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='Execute JSON operations config (v2.1)',
+        description='Execute JSON operations config (v2.3)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Workflow (always validate first):

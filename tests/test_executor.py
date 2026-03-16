@@ -127,8 +127,8 @@ class TestProtectedFileInExecutor:
 class TestPartialEditsWarning:
     """BUG 6: Partial edits succeed silently."""
 
-    def test_partial_edits_emit_warning(self, tmp_project, caplog):
-        """When not all edits apply, a WARNING log should be emitted."""
+    def test_partial_edits_emit_warning_and_fail(self, tmp_project, caplog):
+        """When not all edits apply, a WARNING log should be emitted and result should be False."""
         sample = tmp_project / "sample.py"
         sample.write_text('x = 1\ny = 2\n')
 
@@ -151,7 +151,7 @@ class TestPartialEditsWarning:
         with caplog.at_level(logging.WARNING):
             result = executor.execute_json_config(str(config_path), dry_run=False)
 
-        assert result is True
+        assert result is False
         assert any("1 of 2" in r.message for r in caplog.records)
 
     def test_all_edits_applied_no_warning(self, tmp_project, caplog):

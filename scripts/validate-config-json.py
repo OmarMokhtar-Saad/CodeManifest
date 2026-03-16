@@ -150,13 +150,13 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
                     f"                  Use code_edit to modify existing files"
                 )
 
-            # GUARD 17: Parent directory exists
+            # GUARD 17: Parent directory exists (warning only — executor creates dirs automatically)
             if file_path:
                 parent = os.path.dirname(file_path)
                 if parent and not os.path.exists(parent):
-                    errors.append(
-                        f"Operation {i} (file_create): Parent directory doesn't exist: {parent}\n"
-                        f"                  Create parent directory first or use different path"
+                    print(
+                        f"  Warning: Operation {i} (file_create): Parent directory doesn't exist: {parent}\n"
+                        f"           The executor will create it automatically."
                     )
 
             if not content:

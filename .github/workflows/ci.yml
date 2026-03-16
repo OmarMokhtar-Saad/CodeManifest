@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.11", "3.12"]
+        python-version: ["3.9", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest coverage jsonschema
+          pip install pytest coverage jsonschema ruff
+
+      - name: Lint with ruff
+        run: ruff check scripts/ tests/
 
       - name: Validate example 01
         run: python3 scripts/validate-config-json.py examples/01-simple-edit.json
