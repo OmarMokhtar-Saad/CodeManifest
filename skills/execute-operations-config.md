@@ -18,11 +18,11 @@ Run the script. That's it.
 
 ```bash
 # For a single-part plan:
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 
 # For a multi-part plan:
 for part in $(ls operations/{plan-name}/part*.json | sort); do
-  python scripts/execute-json-ops.py "$part" || exit 1
+  python3 scripts/execute-json-ops.py "$part" || exit 1
 done
 ```
 
@@ -35,7 +35,7 @@ done
 Config must have passed `validate-config-json.py` before execution.
 
 ```bash
-python scripts/validate-config-json.py operations/{plan-name}/ops.json
+python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
 ```
 
 If not yet validated, run validation first.
@@ -45,7 +45,7 @@ If not yet validated, run validation first.
 Always preview before applying:
 
 ```bash
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
 ```
 
 Expected output:
@@ -74,7 +74,7 @@ Review: operations list correct? File paths right? Operation count expected?
 ### Step 3: Execute
 
 ```bash
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 ```
 
 The script automatically:
@@ -125,7 +125,7 @@ For plans split into multiple configs, order matters:
 ```bash
 for part in $(ls operations/{plan-name}/part*.json | sort); do
   echo "Executing: $part"
-  python scripts/execute-json-ops.py "$part"
+  python3 scripts/execute-json-ops.py "$part"
   if [ $? -ne 0 ]; then
     echo "Part failed. Stopping."
     exit 1
@@ -148,13 +148,13 @@ Edit 2: Pattern not found (may have been changed by previous edit)
 1. The script stops — files are backed up and safe
 2. Report to the Planner to fix the `find` pattern
 3. Do NOT manually fix the file
-4. Restore if needed: `python scripts/restore-backup.py --list`
+4. Restore if needed: `python3 scripts/restore-backup.py --list`
 
 ### If an operation fails
 
 The script backs up all files before starting. If any operation fails:
 1. Files that were already modified: check the backup
-2. Restore: `python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}`
+2. Restore: `python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}`
 
 ---
 
@@ -164,13 +164,13 @@ If anything goes wrong after execution:
 
 ```bash
 # List available backups
-python scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --list
 
 # Restore from a specific backup
-python scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000
+python3 scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000
 
 # Restore without confirmation prompt
-python scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000 --force
+python3 scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000 --force
 ```
 
 ---
@@ -184,7 +184,7 @@ BLOCKER: operations/{plan-name}/ops.json exists.
 
 Manual edits are forbidden when an operations config is present.
 
-Run: python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+Run: python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 ```
 
 The only exception: if you need to READ a file to understand context.
@@ -196,17 +196,17 @@ Reading is allowed. Editing is not.
 
 ```bash
 # Validate
-python scripts/validate-config-json.py operations/{plan}/ops.json
+python3 scripts/validate-config-json.py operations/{plan}/ops.json
 
 # Dry run
-python scripts/execute-json-ops.py operations/{plan}/ops.json --dry-run
+python3 scripts/execute-json-ops.py operations/{plan}/ops.json --dry-run
 
 # Execute
-python scripts/execute-json-ops.py operations/{plan}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan}/ops.json
 
 # List backups
-python scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --list
 
 # Restore
-python scripts/restore-backup.py --backup backups/{plan}-{timestamp}
+python3 scripts/restore-backup.py --backup backups/{plan}-{timestamp}
 ```

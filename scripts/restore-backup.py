@@ -162,9 +162,16 @@ def restore_from_backup(backup_dir, force=False, dry_run=False):
 
         # Restore each file (GUARD 7, 8, 9)
         restored_count = 0
+        real_backup_dir = os.path.realpath(backup_dir)
         for file_path in files_to_restore:
             rel_path = os.path.relpath(file_path)
             backup_path = os.path.join(backup_dir, rel_path)
+
+            # GUARD 12: Verify backup source stays inside backup directory
+            real_backup_path = os.path.realpath(backup_path)
+            if not real_backup_path.startswith(real_backup_dir + os.sep):
+                print(f"Error: Backup source path escapes backup directory: {backup_path}")
+                return False
 
             # GUARD 7: Backup file exists
             if not os.path.exists(backup_path):

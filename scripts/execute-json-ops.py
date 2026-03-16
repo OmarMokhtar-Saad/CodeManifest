@@ -20,7 +20,6 @@ Features:
 
 import argparse
 import difflib
-import fcntl
 import fnmatch
 import json
 import logging
@@ -32,6 +31,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
@@ -39,7 +44,11 @@ LOCK_FILE = ".codemanifest.lock"
 
 
 class ExecutionLock:
-    """File-based lock to prevent concurrent executor runs."""
+    """File-based lock to prevent concurrent executor runs.
+
+    Uses fcntl.flock on Unix. On Windows (where fcntl is unavailable),
+    falls back to a simple lock file with no blocking detection.
+    """
 
     def __init__(self, lock_path: str = LOCK_FILE):
         self.lock_path = lock_path
@@ -48,7 +57,8 @@ class ExecutionLock:
     def acquire(self) -> bool:
         try:
             self._fd = os.open(self.lock_path, os.O_CREAT | os.O_WRONLY)
-            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if _HAS_FCNTL:
+                fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.write(self._fd, f"{os.getpid()}\n".encode())
             return True
         except (OSError, IOError):
@@ -60,7 +70,8 @@ class ExecutionLock:
     def release(self):
         if self._fd is not None:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                if _HAS_FCNTL:
+                    fcntl.flock(self._fd, fcntl.LOCK_UN)
                 os.close(self._fd)
             except (OSError, IOError):
                 pass
@@ -161,7 +172,8 @@ def is_protected_file(file_path: str) -> bool:
 def validate_path(file_path: str) -> bool:
     """
     Validate file path for safety.
-    Rejects path traversal and null bytes.
+    Rejects path traversal, null bytes, and paths resolving outside project root.
+    Always resolves the full path (including symlinked parent directories).
     """
     if '\x00' in file_path:
         print(f"  BLOCKED: Path contains null bytes: {file_path!r}")
@@ -170,12 +182,12 @@ def validate_path(file_path: str) -> bool:
     if rel.startswith('..'):
         print(f"  BLOCKED: Path traversal detected: {file_path}")
         return False
-    if os.path.islink(file_path):
-        resolved = os.path.realpath(file_path)
-        cwd = os.path.realpath(os.getcwd())
-        if not resolved.startswith(cwd + os.sep):
-            print(f"  BLOCKED: Symlink points outside project: {file_path} -> {resolved}")
-            return False
+    # Always resolve the full real path to catch symlinked parent directories
+    resolved = os.path.realpath(file_path)
+    cwd = os.path.realpath(os.getcwd())
+    if resolved != cwd and not resolved.startswith(cwd + os.sep):
+        print(f"  BLOCKED: Path resolves outside project: {file_path} -> {resolved}")
+        return False
     return True
 
 
@@ -458,19 +470,15 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
         print()
 
     # Acquire execution lock (non-dry-run only)
-    lock = None
     if not dry_run:
-        lock = ExecutionLock()
-        if not lock.acquire():
-            print("Error: Another CodeManifest executor is running.")
-            print(f"If this is stale, remove {LOCK_FILE}")
+        try:
+            with ExecutionLock():
+                return _execute_operations(config, operations, plan_name, config_format, dry_run)
+        except RuntimeError as e:
+            print(f"Error: {e}")
             return False
-
-    try:
+    else:
         return _execute_operations(config, operations, plan_name, config_format, dry_run)
-    finally:
-        if lock:
-            lock.release()
 
 
 def _execute_operations(config: dict, operations: list, plan_name: str,
@@ -528,10 +536,10 @@ def _execute_operations(config: dict, operations: list, plan_name: str,
                     txn.record_modified(str(file_path))
         elif op_type == 'code_edit':
             success, status = execute_code_edit(operation, backup_dir, dry_run)
+            if status in ("edited", "partial-edits"):
+                txn.record_modified(str(file_path))
             if success:
                 stats['code_edit'] += 1
-                if status == "edited":
-                    txn.record_modified(str(file_path))
         else:
             print(f"  Unknown operation type: {op_type}")
             success = False

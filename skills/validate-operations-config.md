@@ -41,7 +41,7 @@ Immediately reject if:
    YES ↓
 
 4. Run automated validator:
-   python scripts/validate-config-json.py ops.json
+   python3 scripts/validate-config-json.py ops.json
    FAIL → REJECT with errors + fix suggestions
    PASS ↓
 
@@ -59,7 +59,7 @@ Immediately reject if:
 Always run first:
 
 ```bash
-python scripts/validate-config-json.py operations/{plan-name}/ops.json
+python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
 ```
 
 Expected output when valid:
@@ -220,7 +220,7 @@ Validation:
 - JSON syntax valid
 
 Execute with:
-  python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+  python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 ```
 
 ## Rejection Template

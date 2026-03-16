@@ -1,0 +1,19 @@
+{
+  "plan": "modern-code-edit-example",
+  "operations": [
+    {
+      "type": "code_edit",
+      "path": "examples/sample/app.py",
+      "edits": [
+        {
+          "find": "return \"Hello, \" + name",
+          "replace": "return f\"Hello, {name}!\""
+        },
+        {
+          "find": "VERSION = \"1.0.0\"",
+          "replace": "VERSION = \"1.2.0\""
+        }
+      ]
+    }
+  ]
+}

@@ -512,3 +512,158 @@ class TestOperationTransaction:
 
         txn.rollback()
         assert not created.exists()
+
+
+class TestEditActions:
+    """Test all four edit actions: replace, add_after, add_before, delete."""
+
+    def test_add_after(self, tmp_project):
+        """add_after should insert content after matched pattern."""
+        sample = tmp_project / "app.py"
+        sample.write_text('import os\n\ndef main():\n    pass\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "import os\n", "add_after": "import sys\n"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is True
+        content = sample.read_text()
+        assert "import os\nimport sys\n" in content
+
+    def test_add_before(self, tmp_project):
+        """add_before should insert content before matched pattern."""
+        sample = tmp_project / "app.py"
+        sample.write_text('def main():\n    pass\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "def main():", "add_before": "# Entry point\n"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is True
+        content = sample.read_text()
+        assert "# Entry point\ndef main():" in content
+
+    def test_delete_action(self, tmp_project):
+        """delete action should remove matched pattern."""
+        sample = tmp_project / "app.py"
+        sample.write_text('# TODO: remove this\ndef main():\n    pass\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "# TODO: remove this\n", "delete": True}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is True
+        content = sample.read_text()
+        assert "# TODO" not in content
+        assert "def main():" in content
+
+    def test_delete_false_does_not_delete(self, tmp_project):
+        """delete: false should not trigger deletion."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "delete": False}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        # delete: false means no action — all edits fail (0 of 1)
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+
+
+class TestPartialEditsRollback:
+    """BUG 1 fix: partial-edits must be tracked for rollback."""
+
+    def test_partial_edits_file_is_rolled_back(self, tmp_project):
+        """When partial edits occur and next op fails, file should be restored."""
+        sample = tmp_project / "app.py"
+        original = 'x = 1\ny = 2\nz = 3\n'
+        sample.write_text(original)
+        failing = tmp_project / "nope.py"
+
+        config = {
+            "plan": "partial-rollback",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [
+                        {"find": "x = 1", "replace": "x = 99"},
+                        {"find": "NONEXISTENT", "replace": "oops"},
+                    ],
+                },
+                {
+                    "type": "code_edit",
+                    "path": str(failing),
+                    "edits": [{"find": "a", "replace": "b"}],
+                },
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+        # The file with partial edits should be restored to original
+        assert sample.read_text() == original
+
+
+class TestSymlinkParentEscape:
+    """BUG 2 fix: symlinked parent directory must be caught."""
+
+    def test_symlinked_parent_blocked(self, tmp_project):
+        """Path through symlinked parent pointing outside project should be blocked."""
+        import tempfile
+
+        # Create a directory outside the project
+        outside = tempfile.mkdtemp()
+        try:
+            # Create a symlink inside the project pointing to outside
+            symlink = tmp_project / "escape_link"
+            os.symlink(outside, str(symlink))
+
+            # Try to validate a path through the symlink
+            result = executor.validate_path(str(symlink / "evil.py"))
+            assert result is False
+        finally:
+            import shutil
+            shutil.rmtree(outside, ignore_errors=True)

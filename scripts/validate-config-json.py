@@ -188,12 +188,13 @@ def validate_against_schema(config: dict, schema_file: str) -> Tuple[bool, List[
         validate(instance=config, schema=schema)
         return True, []
     except ValidationError as e:
-        error_msg = f"Schema validation failed: {e.message}"
+        msg = getattr(e, 'message', str(e))
+        error_msg = f"Schema validation failed: {msg}"
         if e.absolute_path:
             path = ".".join(str(p) for p in e.absolute_path)
             error_msg += f" at path: {path}"
         errors.append(error_msg)
-        if "Additional properties are not allowed" in e.message:
+        if "Additional properties are not allowed" in msg:
             errors.append("REJECTED: Config contains non-standard fields!")
             errors.append("Allowed fields: plan, files, operations, path, edits, find, add_after, add_before, replace, delete")
         return False, errors
