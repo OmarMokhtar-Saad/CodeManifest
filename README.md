@@ -363,7 +363,7 @@ python3 scripts/execute-json-ops.py ops.json
 | `jsonschema` | Optional. Enables strict JSON schema validation. `pip3 install jsonschema` |
 | `pytest` | Optional. For running the test suite. `pip3 install pytest` |
 
-**CI tested:** Python 3.9, 3.11, 3.12, 3.13 on Ubuntu with ruff linting, 115 tests, minimum 75% coverage enforced.
+**CI tested:** Python 3.9, 3.10, 3.11, 3.12, 3.13 on Ubuntu with ruff linting, 115 tests, minimum 75% coverage enforced.
 
 ---
 
@@ -403,7 +403,7 @@ CodeManifest/
 ├── skills/                          Generic skill files (any LLM)
 ├── templates/                       CLAUDE.md and AGENTS.md templates
 │
-├── .github/workflows/ci.yml        CI on Python 3.9/3.11/3.12/3.13 + ruff
+├── .github/workflows/ci.yml        CI on Python 3.9/3.10/3.11/3.12/3.13 + ruff
 ├── LICENSE                          MIT
 ├── CONTRIBUTING.md
 ├── SECURITY.md

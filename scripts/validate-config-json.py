@@ -21,9 +21,10 @@ import json
 import os
 import re
 import sys
-import fnmatch
 from pathlib import Path
 from typing import List, Tuple
+
+from shared import PROTECTED_PATTERNS, MAX_FILE_SIZE_BYTES, is_protected_file
 
 try:
     import jsonschema
@@ -31,42 +32,6 @@ try:
     JSONSCHEMA_AVAILABLE = True
 except ImportError:
     JSONSCHEMA_AVAILABLE = False
-
-# Protected file patterns (cannot be deleted via ops config)
-# Add project-specific patterns here as needed
-PROTECTED_PATTERNS = [
-    ".gitignore",
-    "*.md",         # All markdown files (README, docs, etc.)
-    "Makefile",
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    "requirements.txt",
-    "package.json",
-    "package-lock.json",
-    "yarn.lock",
-    "pyproject.toml",
-    "setup.py",
-    "setup.cfg",
-    "Pipfile",
-    "Pipfile.lock",
-    "tsconfig.json",
-]
-
-# Maximum file size the executor will process (2MB)
-MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024
-
-
-def is_protected_file(file_path: str) -> bool:
-    """
-    Check if file matches protected patterns.
-    Protected files CANNOT be deleted via operations config.
-    """
-    file_name = os.path.basename(file_path)
-    for pattern in PROTECTED_PATTERNS:
-        if fnmatch.fnmatch(file_name, pattern):
-            return True
-    return False
 
 
 def detect_config_format(config: dict) -> str:
@@ -172,6 +137,60 @@ def validate_file_operations(operations: List[dict]) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
+def _validate_edits(edits: list, file_content: str, label: str, errors: List[str]):
+    """Validate edit entries against file content (GUARDs 8-11).
+
+    Args:
+        edits: List of edit dicts from the config.
+        file_content: The current text content of the target file.
+        label: Prefix for error messages (e.g. "File 1" or "Operation 2").
+        errors: List to append error messages to.
+    """
+    for j, edit in enumerate(edits, 1):
+        # GUARD 8: Check for action type
+        action_types = ['add_after', 'add_before', 'replace', 'delete']
+        has_action = any(act in edit for act in action_types)
+        if not has_action:
+            errors.append(
+                f"{label}, Edit {j}: No action specified (need one of: {action_types})"
+            )
+
+        # GUARD 9: Check 'find' pattern exists
+        if 'find' not in edit:
+            errors.append(f"{label}, Edit {j}: Missing 'find' pattern")
+            continue
+
+        find_pattern = edit['find']
+
+        # GUARD 26: Null byte check on find pattern and action content
+        if '\x00' in find_pattern:
+            errors.append(f"{label}, Edit {j}: Find pattern contains null bytes")
+            continue
+        for action_key in ('replace', 'add_after', 'add_before'):
+            if action_key in edit and '\x00' in edit[action_key]:
+                errors.append(f"{label}, Edit {j}: '{action_key}' content contains null bytes")
+
+        # GUARD 10: Verify 'find' exists in file
+        if find_pattern not in file_content:
+            preview = find_pattern[:50].replace('\n', '\\n')
+            if len(find_pattern) > 50:
+                preview += "..."
+            errors.append(
+                f"{label}, Edit {j}: Pattern not found in file\n"
+                f"                  Looking for: \"{preview}\"\n"
+                f"                  FIX: Check for typos, extra spaces, or wrong line"
+            )
+            continue
+
+        # GUARD 11: Check for multiple occurrences (ambiguous match)
+        occurrence_count = file_content.count(find_pattern)
+        if occurrence_count > 1:
+            errors.append(
+                f"{label}, Edit {j}: Pattern appears {occurrence_count} times in file\n"
+                f"                  FIX: Make pattern more specific to match only once"
+            )
+
+
 def validate_against_schema(config: dict, schema_file: str) -> Tuple[bool, List[str]]:
     """Validate config against JSON schema."""
     if not JSONSCHEMA_AVAILABLE:
@@ -245,7 +264,9 @@ def validate_json_config(config_file: str) -> Tuple[bool, List[str]]:
 
     except json.JSONDecodeError as e:
         return False, [f"Invalid JSON syntax: {e}"]
-    except Exception as e:
+    except UnicodeDecodeError:
+        return False, [f"File appears to be binary or non-UTF-8: {config_file}"]
+    except (OSError, KeyError, TypeError) as e:
         return False, [f"Validation error: {e}"]
 
 
@@ -306,53 +327,14 @@ def validate_legacy_format(config: dict, errors: List[str]) -> Tuple[bool, List[
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
-        except Exception as e:
+        except UnicodeDecodeError:
+            errors.append(f"File {i}: File appears to be binary or non-UTF-8: {file_path}")
+            continue
+        except OSError as e:
             errors.append(f"File {i}: Error reading file: {e}")
             continue
 
-        for j, edit in enumerate(edits, 1):
-            # GUARD 8: Check for action type
-            action_types = ['add_after', 'add_before', 'replace', 'delete']
-            has_action = any(act in edit for act in action_types)
-            if not has_action:
-                errors.append(
-                    f"File {i}, Edit {j}: No action specified (need one of: {action_types})"
-                )
-
-            # GUARD 9: Check 'find' pattern exists
-            if 'find' not in edit:
-                errors.append(f"File {i}, Edit {j}: Missing 'find' pattern")
-                continue
-
-            find_pattern = edit['find']
-
-            # GUARD 26: Null byte check on find pattern and action content
-            if '\x00' in find_pattern:
-                errors.append(f"File {i}, Edit {j}: Find pattern contains null bytes")
-                continue
-            for action_key in ('replace', 'add_after', 'add_before'):
-                if action_key in edit and '\x00' in edit[action_key]:
-                    errors.append(f"File {i}, Edit {j}: '{action_key}' content contains null bytes")
-
-            # GUARD 10: Verify 'find' exists in file
-            if find_pattern not in file_content:
-                preview = find_pattern[:50].replace('\n', '\\n')
-                if len(find_pattern) > 50:
-                    preview += "..."
-                errors.append(
-                    f"File {i}, Edit {j}: Pattern not found in file\n"
-                    f"                  Looking for: \"{preview}\"\n"
-                    f"                  FIX: Check for typos, extra spaces, or wrong line"
-                )
-                continue
-
-            # GUARD 11: Check for multiple occurrences (ambiguous match)
-            occurrence_count = file_content.count(find_pattern)
-            if occurrence_count > 1:
-                errors.append(
-                    f"File {i}, Edit {j}: Pattern appears {occurrence_count} times in file\n"
-                    f"                  FIX: Make pattern more specific to match only once"
-                )
+        _validate_edits(edits, file_content, f"File {i}", errors)
 
     return len(errors) == 0, errors
 
@@ -434,53 +416,14 @@ def validate_modern_format(config: dict, errors: List[str]) -> Tuple[bool, List[
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
-        except Exception as e:
+        except UnicodeDecodeError:
+            errors.append(f"Operation {i} (code_edit): File appears to be binary or non-UTF-8: {file_path}")
+            continue
+        except OSError as e:
             errors.append(f"Operation {i} (code_edit): Error reading file: {e}")
             continue
 
-        for j, edit in enumerate(edits, 1):
-            # GUARD 8: Check for action type
-            action_types = ['add_after', 'add_before', 'replace', 'delete']
-            has_action = any(act in edit for act in action_types)
-            if not has_action:
-                errors.append(
-                    f"Operation {i}, Edit {j}: No action specified (need one of: {action_types})"
-                )
-
-            # GUARD 9: Check 'find' pattern exists
-            if 'find' not in edit:
-                errors.append(f"Operation {i}, Edit {j}: Missing 'find' pattern")
-                continue
-
-            find_pattern = edit['find']
-
-            # GUARD 26: Null byte check on find pattern and action content
-            if '\x00' in find_pattern:
-                errors.append(f"Operation {i}, Edit {j}: Find pattern contains null bytes")
-                continue
-            for action_key in ('replace', 'add_after', 'add_before'):
-                if action_key in edit and '\x00' in edit[action_key]:
-                    errors.append(f"Operation {i}, Edit {j}: '{action_key}' content contains null bytes")
-
-            # GUARD 10: Verify 'find' exists in file
-            if find_pattern not in file_content:
-                preview = find_pattern[:50].replace('\n', '\\n')
-                if len(find_pattern) > 50:
-                    preview += "..."
-                errors.append(
-                    f"Operation {i}, Edit {j}: Pattern not found in file\n"
-                    f"                  Looking for: \"{preview}\"\n"
-                    f"                  FIX: Check for typos, extra spaces, or wrong line"
-                )
-                continue
-
-            # GUARD 11: Check for multiple occurrences (ambiguous match)
-            occurrence_count = file_content.count(find_pattern)
-            if occurrence_count > 1:
-                errors.append(
-                    f"Operation {i}, Edit {j}: Pattern appears {occurrence_count} times in file\n"
-                    f"                  FIX: Make pattern more specific to match only once"
-                )
+        _validate_edits(edits, file_content, f"Operation {i}", errors)
 
     return len(errors) == 0, errors
 
@@ -657,7 +600,12 @@ Safety Guards (29 total):
         """
     )
     parser.add_argument('config', help='Path to JSON operations config file')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
+
+    if args.verbose:
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
 
     if not JSONSCHEMA_AVAILABLE:
         print("Warning: jsonschema library not installed - schema validation skipped")

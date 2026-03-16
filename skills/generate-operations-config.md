@@ -234,8 +234,9 @@ If `find` matches multiple places, expand the context to make it unique:
 ```json
 {
   "plan": "add-request-logging",
-  "files": [
+  "operations": [
     {
+      "type": "code_edit",
       "path": "src/middleware.py",
       "edits": [
         {
@@ -245,6 +246,7 @@ If `find` matches multiple places, expand the context to make it unique:
       ]
     },
     {
+      "type": "code_edit",
       "path": "src/app.py",
       "edits": [
         {

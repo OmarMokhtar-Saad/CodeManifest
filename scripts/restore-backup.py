@@ -304,8 +304,13 @@ Examples:
     parser.add_argument('--dry-run', action='store_true', help='Preview what would be restored without touching files')
     parser.add_argument('--list', action='store_true', help='List available backups')
     parser.add_argument('--backup-dir', default='backups', help='Base backup directory (default: backups)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
 
     args = parser.parse_args()
+
+    if args.verbose:
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
 
     if args.list:
         print(f"Available backups in: {args.backup_dir}\n")

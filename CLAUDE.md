@@ -6,10 +6,12 @@ cutting AI token costs 77-92% by separating planning (AI) from execution (Python
 ## Project Structure
 
 ```
-scripts/    - The 3 Python scripts (validate, execute, restore) + JSON schema
+scripts/    - The 3 Python scripts (validate, execute, restore) + shared module + JSON schema
 skills/     - AI skill markdown files (generic, copy into any project)
-examples/   - Runnable examples with sample files
-templates/  - CLAUDE.md.template for wiring the pattern into a new project
+examples/   - Runnable examples (01-04) with sample files
+templates/  - CLAUDE.md.template and AGENTS.md.template for wiring the pattern into a new project
+prompts/    - One-prompt setup files for Claude Code, Cursor, Copilot, ChatGPT, etc.
+tests/      - 115 tests: validator, executor, restore, and end-to-end integration
 ```
 
 ## What This Repo Contains

@@ -20,7 +20,6 @@ Features:
 
 import argparse
 import difflib
-import fnmatch
 import json
 import logging
 import os
@@ -30,6 +29,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+from shared import PROTECTED_PATTERNS, is_protected_file
 
 try:
     import fcntl
@@ -135,38 +136,6 @@ class OperationTransaction:
     @property
     def created_files(self) -> List[str]:
         return list(self._created_files)
-
-# Protected file patterns (cannot be deleted via ops config)
-PROTECTED_PATTERNS = [
-    ".gitignore",
-    "*.md",
-    "Makefile",
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    "requirements.txt",
-    "package.json",
-    "package-lock.json",
-    "yarn.lock",
-    "pyproject.toml",
-    "setup.py",
-    "setup.cfg",
-    "Pipfile",
-    "Pipfile.lock",
-    "tsconfig.json",
-]
-
-
-def is_protected_file(file_path: str) -> bool:
-    """
-    Check if file matches protected patterns.
-    Protected files CANNOT be deleted via operations config.
-    """
-    file_name = os.path.basename(file_path)
-    for pattern in PROTECTED_PATTERNS:
-        if fnmatch.fnmatch(file_name, pattern):
-            return True
-    return False
 
 
 def validate_path(file_path: str) -> bool:
@@ -361,7 +330,10 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
 
     try:
         content = file_path.read_text(encoding='utf-8')
-    except Exception as e:
+    except UnicodeDecodeError:
+        print(f"  Error: File appears to be binary or non-UTF-8: {file_path}")
+        return False, "binary-or-non-utf8"
+    except OSError as e:
         print(f"  Error reading file: {e}")
         return False, str(e)
 
@@ -601,7 +573,11 @@ Safety:
     )
     parser.add_argument('config', help='Path to JSON operations config file')
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without applying them')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, force=True)
 
     success = execute_json_config(args.config, dry_run=args.dry_run)
     sys.exit(0 if success else 1)
