@@ -799,3 +799,60 @@ class TestEdgeCases:
         assert validator.detect_config_format({"operations": []}) == "modern"
         assert validator.detect_config_format({"files": []}) == "legacy"
         assert validator.detect_config_format({"data": []}) == "unknown"
+
+
+class TestGuardWarningsNotErrors:
+    """GUARD 21 and GUARD 23 should warn without causing rejection."""
+
+    def test_plan_name_with_spaces_still_approved(self, tmp_project, monkeypatch):
+        """GUARD 21: Plan with unsafe chars should warn but still pass validation."""
+        monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "my plan with spaces",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "replace": "x = 2"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        valid, errors = validator.validate_json_config(str(config_path))
+        assert valid, f"Should approve despite unsafe plan name, got errors: {errors}"
+
+    def test_duplicate_filename_still_approved(self, tmp_project, monkeypatch):
+        """GUARD 23: Duplicate filenames across dirs should warn but still pass."""
+        monkeypatch.setattr(validator, "JSONSCHEMA_AVAILABLE", False)
+        dir_a = tmp_project / "a"
+        dir_b = tmp_project / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        (dir_a / "app.py").write_text('x = 1\n')
+        (dir_b / "app.py").write_text('y = 2\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(dir_a / "app.py"),
+                    "edits": [{"find": "x = 1", "replace": "x = 10"}],
+                },
+                {
+                    "type": "code_edit",
+                    "path": str(dir_b / "app.py"),
+                    "edits": [{"find": "y = 2", "replace": "y = 20"}],
+                },
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        valid, errors = validator.validate_json_config(str(config_path))
+        assert valid, f"Should approve despite duplicate filenames, got errors: {errors}"

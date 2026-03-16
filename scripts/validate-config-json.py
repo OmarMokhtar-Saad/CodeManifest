@@ -461,7 +461,8 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
 
     file_paths = [op['path'] for op in operations if 'path' in op]
 
-    # GUARD 19: Backup path format consistency
+    # GUARD 19: Backup path format consistency (with symlink resolution)
+    cwd = os.path.realpath(os.getcwd())
     for file_path in file_paths:
         try:
             rel_path = os.path.relpath(file_path)
@@ -470,8 +471,15 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
                     f"GUARD 19 FAILED: File path outside project root: {file_path}\n"
                     f"                  All files must be within the working directory"
                 )
-        except Exception as e:
-            errors.append(f"GUARD 19 FAILED: Cannot convert to relative path: {file_path} ({e})")
+                continue
+            resolved = os.path.realpath(file_path)
+            if resolved != cwd and not resolved.startswith(cwd + os.sep):
+                errors.append(
+                    f"GUARD 19 FAILED: Path resolves outside project root: {file_path}\n"
+                    f"                  Resolved to: {resolved}"
+                )
+        except (OSError, ValueError) as e:
+            errors.append(f"GUARD 19 FAILED: Cannot validate path: {file_path} ({e})")
 
     # GUARD 20: Manifest path reconstruction testability
     for file_path in file_paths:
@@ -486,17 +494,16 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
         except Exception as e:
             errors.append(f"GUARD 20 FAILED: Path reconstruction failed: {file_path} ({e})")
 
-    # GUARD 21: Plan name safe for filesystem paths
+    # GUARD 21: Plan name safe for filesystem paths (warning only — executor sanitizes)
     plan_name = config.get('plan', '')
     if plan_name:
         unsafe_chars = re.findall(r'[^a-zA-Z0-9_\-]', plan_name)
         if unsafe_chars:
             unique_chars = list(dict.fromkeys(unsafe_chars))
-            errors.append(
-                f"GUARD 21 WARNING: Plan name contains characters that will be sanitized in backup path: "
+            print(
+                f"  Warning: Plan name contains characters that will be sanitized: "
                 f"{repr(plan_name)}\n"
-                f"                  Unsafe chars: {unique_chars}\n"
-                f"                  FIX: Use only letters, digits, hyphens, underscores in plan name"
+                f"           Unsafe chars: {unique_chars}"
             )
 
     # GUARD 22: Backup directory parent is writable
@@ -515,16 +522,15 @@ def validate_backup_compatibility(config_file: str) -> Tuple[bool, List[str]]:
                 f"                  FIX: Run from a writable directory"
             )
 
-    # GUARD 23: File naming collision detection
+    # GUARD 23: File naming collision detection (warning only — backup uses nested dirs)
     filename_map = {}
     for file_path in file_paths:
         filename = os.path.basename(file_path)
         if filename in filename_map and filename_map[filename] != file_path:
-            errors.append(
-                f"GUARD 23 WARNING: Duplicate filename detected: {filename}\n"
-                f"                  Path 1: {filename_map[filename]}\n"
-                f"                  Path 2: {file_path}\n"
-                f"                  Nested backup structure required to prevent overwrite"
+            print(
+                f"  Warning: Duplicate filename across paths: {filename}\n"
+                f"           Path 1: {filename_map[filename]}\n"
+                f"           Path 2: {file_path}"
             )
         else:
             filename_map[filename] = file_path

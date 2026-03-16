@@ -363,7 +363,7 @@ python3 scripts/execute-json-ops.py ops.json
 | `jsonschema` | Optional. Enables strict JSON schema validation. `pip3 install jsonschema` |
 | `pytest` | Optional. For running the test suite. `pip3 install pytest` |
 
-**CI tested:** Python 3.9, 3.10, 3.11, 3.12, 3.13 on Ubuntu with ruff linting, 115 tests, minimum 75% coverage enforced.
+**CI tested:** Python 3.9, 3.10, 3.11, 3.12, 3.13 on Ubuntu with ruff linting, 124 tests, minimum 75% coverage enforced.
 
 ---
 
@@ -377,7 +377,7 @@ CodeManifest/
 │   ├── restore-backup.py            One-command recovery (12 safety guards)
 │   └── operations-schema.json       Strict JSON schema (used by validator)
 │
-├── tests/                           115 tests across 4 files
+├── tests/                           124 tests across 4 files
 │   ├── conftest.py                  Shared fixtures
 │   ├── test_validator.py            Validator tests (all 29 guards)
 │   ├── test_executor.py             Executor tests (edits, rollback, lock, diff, paths)

@@ -667,3 +667,146 @@ class TestSymlinkParentEscape:
         finally:
             import shutil
             shutil.rmtree(outside, ignore_errors=True)
+
+
+class TestDryRunPartialEdits:
+    """Dry-run should fail when partial edits apply (matching real execution)."""
+
+    def test_dry_run_fails_on_partial_edits(self, tmp_project):
+        """Dry-run with partial edits should return False."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\ny = 2\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [
+                        {"find": "x = 1", "replace": "x = 10"},
+                        {"find": "NONEXISTENT", "replace": "oops"},
+                    ],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is False
+
+    def test_dry_run_succeeds_on_full_edits(self, tmp_project):
+        """Dry-run with all edits matching should return True."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\ny = 2\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [
+                        {"find": "x = 1", "replace": "x = 10"},
+                        {"find": "y = 2", "replace": "y = 20"},
+                    ],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is True
+
+
+class TestStrictDeleteTyping:
+    """delete action must be strictly True, not just truthy."""
+
+    def test_delete_string_rejected(self, tmp_project):
+        """delete: 'yes' (truthy string) should not trigger deletion."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "delete": "yes"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+        assert sample.read_text() == 'x = 1\n'
+
+    def test_delete_int_rejected(self, tmp_project):
+        """delete: 1 (truthy int) should not trigger deletion."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "operations": [
+                {
+                    "type": "code_edit",
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "delete": 1}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is False
+
+
+class TestMalformedLegacyConfig:
+    """Malformed legacy configs should fail gracefully, not KeyError."""
+
+    def test_legacy_missing_path(self, tmp_project):
+        """Legacy entry without 'path' should fail gracefully."""
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {"edits": [{"find": "x", "replace": "y"}]}
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is False
+
+    def test_legacy_missing_edits(self, tmp_project):
+        """Legacy entry without 'edits' should fail gracefully."""
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {"path": "some/file.py"}
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is False
+
+    def test_legacy_non_dict_entry(self, tmp_project):
+        """Legacy entry that is not a dict should fail gracefully."""
+        config = {
+            "plan": "test-plan",
+            "files": ["not-a-dict"],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is False

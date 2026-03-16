@@ -26,7 +26,7 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -166,12 +166,20 @@ def normalize_config(config: dict) -> dict:
 
     Legacy: {"plan": "...", "files": [...]}
     Modern: {"plan": "...", "operations": [{"type": "code_edit", ...}]}
+
+    Returns None if the config is malformed.
     """
     if 'operations' in config:
         return config
 
     operations = []
     for file_op in config.get('files', []):
+        if not isinstance(file_op, dict):
+            print(f"Error: Invalid file entry (expected object): {file_op!r}")
+            return None
+        if 'path' not in file_op or 'edits' not in file_op:
+            print(f"Error: Legacy file entry missing 'path' or 'edits': {file_op!r}")
+            return None
         operations.append({
             'type': 'code_edit',
             'path': file_op['path'],
@@ -192,7 +200,7 @@ def create_manifest(backup_dir: Path, plan_name: str, files_to_backup: List[str]
     """
     manifest = {
         'plan': plan_name,
-        'timestamp': datetime.now().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'files': files_to_backup,
         'created_files': files_to_create
     }
@@ -372,7 +380,7 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
             print(f"  Edit {j}: Replaced pattern with {len(edit['replace'])} chars")
             edits_applied += 1
 
-        elif edit.get('delete'):
+        elif edit.get('delete') is True:
             modified_content = modified_content.replace(find_pattern, '', 1)
             print(f"  Edit {j}: Deleted pattern")
             edits_applied += 1
@@ -396,6 +404,8 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
         print(f"  [DRY RUN] Would write {byte_size} bytes to: {file_path}")
         if content != modified_content:
             show_diff(str(file_path), content, modified_content)
+        if edits_applied < len(edits):
+            return False, "dry-run-partial"
         return True, "dry-run"
     else:
         try:
@@ -428,6 +438,8 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
         return False
 
     config = normalize_config(raw_config)
+    if config is None:
+        return False
     plan_name = config.get('plan', 'unknown')
     operations = config.get('operations', [])
     config_format = "MODERN" if 'operations' in raw_config else "LEGACY"
@@ -457,7 +469,7 @@ def _execute_operations(config: dict, operations: list, plan_name: str,
                         config_format: str, dry_run: bool) -> bool:
     """Internal execution logic, called with lock held."""
     # Create backup directory (sanitize plan name for safe filesystem path)
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')
     safe_plan_name = re.sub(r'[^a-zA-Z0-9_-]', '_', plan_name)
     backup_dir = Path("backups") / f"{safe_plan_name}-{timestamp}"
 
