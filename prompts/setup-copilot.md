@@ -11,6 +11,7 @@ mkdir -p scripts
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/validate-config-json.py -o scripts/validate-config-json.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/execute-json-ops.py -o scripts/execute-json-ops.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/restore-backup.py -o scripts/restore-backup.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/shared.py -o scripts/shared.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/operations-schema.json -o scripts/operations-schema.json
 ```
 
@@ -52,10 +53,10 @@ When asked to make ANY code change:
 
 ## Workflow
 
-1. Validate: `python scripts/validate-config-json.py path/to/ops.json`
-2. Dry run:  `python scripts/execute-json-ops.py path/to/ops.json --dry-run`
-3. Execute:  `python scripts/execute-json-ops.py path/to/ops.json`
-4. Restore:  `python scripts/restore-backup.py --backup backups/<backup-dir>`
+1. Validate: `python3 scripts/validate-config-json.py path/to/ops.json`
+2. Dry run:  `python3 scripts/execute-json-ops.py path/to/ops.json --dry-run`
+3. Execute:  `python3 scripts/execute-json-ops.py path/to/ops.json`
+4. Restore:  `python3 scripts/restore-backup.py --backup backups/<backup-dir>`
 
 ## ops.json Format
 
@@ -144,9 +145,9 @@ AI describes changes in `ops.json`. Python executes them.
 
 1. **Read** every target file before writing any `find` pattern
 2. **Generate** `ops.json` at `operations/{plan-name}/ops.json`
-3. **Validate**: `python scripts/validate-config-json.py operations/{plan-name}/ops.json`
-4. **Dry run**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run`
-5. **Execute**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json`
+3. **Validate**: `python3 scripts/validate-config-json.py operations/{plan-name}/ops.json`
+4. **Dry run**: `python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run`
+5. **Execute**: `python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json`
 
 ## ops.json Format
 
@@ -194,8 +195,8 @@ AI describes changes in `ops.json`. Python executes them.
 ## Restore
 
 ```bash
-python scripts/restore-backup.py --list
-python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}
+python3 scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}
 ```
 ```
 

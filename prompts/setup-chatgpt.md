@@ -14,6 +14,7 @@ mkdir -p scripts
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/validate-config-json.py -o scripts/validate-config-json.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/execute-json-ops.py -o scripts/execute-json-ops.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/restore-backup.py -o scripts/restore-backup.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/shared.py -o scripts/shared.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/operations-schema.json -o scripts/operations-schema.json
 ```
 
@@ -93,15 +94,15 @@ When the user asks for a code change:
 2. Produce the ops.json
 3. Tell them to save it as `operations/{plan-name}/ops.json` and run:
    ```
-   python scripts/validate-config-json.py operations/{plan-name}/ops.json
-   python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
-   python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+   python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
+   python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
+   python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
    ```
 
 If anything goes wrong, they can restore with:
 ```
-python scripts/restore-backup.py --list
-python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp} --force
+python3 scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp} --force
 ```
 
 ### END OF SYSTEM PROMPT — stop copying here

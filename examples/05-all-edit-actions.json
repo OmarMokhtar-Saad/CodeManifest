@@ -1,0 +1,23 @@
+{
+  "plan": "all-edit-actions-example",
+  "operations": [
+    {
+      "type": "code_edit",
+      "path": "examples/sample/app.py",
+      "edits": [
+        {
+          "find": "def greet(name):",
+          "add_before": "# Greeting utility\n"
+        },
+        {
+          "find": "def calculate(a, b):\n    return a + b",
+          "add_after": "\n\n\ndef multiply(a, b):\n    return a * b"
+        },
+        {
+          "find": "VERSION = \"1.0.0\"",
+          "replace": "VERSION = \"1.3.0\""
+        }
+      ]
+    }
+  ]
+}

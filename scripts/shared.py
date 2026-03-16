@@ -1,5 +1,7 @@
 """Shared constants and utilities for CodeManifest scripts."""
 
+__version__ = "3.1.0"
+
 import fnmatch
 import os
 

@@ -11,6 +11,7 @@ mkdir -p scripts
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/validate-config-json.py -o scripts/validate-config-json.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/execute-json-ops.py -o scripts/execute-json-ops.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/restore-backup.py -o scripts/restore-backup.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/shared.py -o scripts/shared.py
 curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/operations-schema.json -o scripts/operations-schema.json
 ```
 
@@ -306,7 +307,7 @@ Immediately reject if:
    YES |
 
 4. Run automated validator:
-   python scripts/validate-config-json.py ops.json
+   python3 scripts/validate-config-json.py ops.json
    FAIL -> REJECT with errors + fix suggestions
    PASS |
 
@@ -324,7 +325,7 @@ Immediately reject if:
 Always run first:
 
 ```bash
-python scripts/validate-config-json.py operations/{plan-name}/ops.json
+python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
 ```
 
 Expected output when valid:
@@ -466,11 +467,11 @@ Run the script. That's it.
 
 ```bash
 # For a single-part plan:
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 
 # For a multi-part plan:
 for part in $(ls operations/{plan-name}/part*.json | sort); do
-  python scripts/execute-json-ops.py "$part" || exit 1
+  python3 scripts/execute-json-ops.py "$part" || exit 1
 done
 ```
 
@@ -483,7 +484,7 @@ done
 Config must have passed `validate-config-json.py` before execution.
 
 ```bash
-python scripts/validate-config-json.py operations/{plan-name}/ops.json
+python3 scripts/validate-config-json.py operations/{plan-name}/ops.json
 ```
 
 If not yet validated, run validation first.
@@ -493,7 +494,7 @@ If not yet validated, run validation first.
 Always preview before applying:
 
 ```bash
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run
 ```
 
 Expected output:
@@ -522,7 +523,7 @@ Review: operations list correct? File paths right? Operation count expected?
 ### Step 3: Execute
 
 ```bash
-python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 ```
 
 The script automatically:
@@ -576,13 +577,13 @@ Edit 2: Pattern not found (may have been changed by previous edit)
 1. The script stops — files are backed up and safe
 2. Report to the Planner to fix the `find` pattern
 3. Do NOT manually fix the file
-4. Restore if needed: `python scripts/restore-backup.py --list`
+4. Restore if needed: `python3 scripts/restore-backup.py --list`
 
 ### If an operation fails
 
 The script backs up all files before starting. If any operation fails:
 1. Files that were already modified: check the backup
-2. Restore: `python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}`
+2. Restore: `python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}`
 
 ---
 
@@ -592,13 +593,13 @@ If anything goes wrong after execution:
 
 ```bash
 # List available backups
-python scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --list
 
 # Restore from a specific backup
-python scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000
+python3 scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000
 
 # Restore without confirmation prompt
-python scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000 --force
+python3 scripts/restore-backup.py --backup backups/{plan-name}-20240101-120000 --force
 ```
 
 ---
@@ -612,7 +613,7 @@ BLOCKER: operations/{plan-name}/ops.json exists.
 
 Manual edits are forbidden when an operations config is present.
 
-Run: python scripts/execute-json-ops.py operations/{plan-name}/ops.json
+Run: python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json
 ```
 
 The only exception: if you need to READ a file to understand context.
@@ -624,19 +625,19 @@ Reading is allowed. Editing is not.
 
 ```bash
 # Validate
-python scripts/validate-config-json.py operations/{plan}/ops.json
+python3 scripts/validate-config-json.py operations/{plan}/ops.json
 
 # Dry run
-python scripts/execute-json-ops.py operations/{plan}/ops.json --dry-run
+python3 scripts/execute-json-ops.py operations/{plan}/ops.json --dry-run
 
 # Execute
-python scripts/execute-json-ops.py operations/{plan}/ops.json
+python3 scripts/execute-json-ops.py operations/{plan}/ops.json
 
 # List backups
-python scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --list
 
 # Restore
-python scripts/restore-backup.py --backup backups/{plan}-{timestamp}
+python3 scripts/restore-backup.py --backup backups/{plan}-{timestamp}
 ```
 ~~~
 
@@ -656,10 +657,10 @@ Plans without ops.json are rejected. No exceptions.
 
 ### Workflow
 
-1. Validate: `python scripts/validate-config-json.py path/to/ops.json`
-2. Dry run:  `python scripts/execute-json-ops.py path/to/ops.json --dry-run`
-3. Execute:  `python scripts/execute-json-ops.py path/to/ops.json`
-4. Restore:  `python scripts/restore-backup.py --backup backups/<backup-dir>`
+1. Validate: `python3 scripts/validate-config-json.py path/to/ops.json`
+2. Dry run:  `python3 scripts/execute-json-ops.py path/to/ops.json --dry-run`
+3. Execute:  `python3 scripts/execute-json-ops.py path/to/ops.json`
+4. Restore:  `python3 scripts/restore-backup.py --backup backups/<backup-dir>`
 
 ### AI Role (MANDATORY)
 
@@ -747,9 +748,9 @@ AI describes changes in `ops.json`. Python executes them.
 
 1. **Read** every target file before writing any `find` pattern
 2. **Generate** `ops.json` at `operations/{plan-name}/ops.json`
-3. **Validate**: `python scripts/validate-config-json.py operations/{plan-name}/ops.json`
-4. **Dry run**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run`
-5. **Execute**: `python scripts/execute-json-ops.py operations/{plan-name}/ops.json`
+3. **Validate**: `python3 scripts/validate-config-json.py operations/{plan-name}/ops.json`
+4. **Dry run**: `python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json --dry-run`
+5. **Execute**: `python3 scripts/execute-json-ops.py operations/{plan-name}/ops.json`
 
 ## ops.json Format
 
@@ -797,8 +798,8 @@ AI describes changes in `ops.json`. Python executes them.
 ## Restore
 
 ```bash
-python scripts/restore-backup.py --list
-python scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}
+python3 scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --backup backups/{plan-name}-{timestamp}
 ```
 ```
 

@@ -27,6 +27,9 @@ from pathlib import PurePath
 import shutil
 import sys
 
+sys.path.insert(0, os.path.dirname(__file__))
+from shared import __version__
+
 
 def restore_from_backup(backup_dir, force=False, dry_run=False):
     """
@@ -305,6 +308,7 @@ Examples:
     parser.add_argument('--list', action='store_true', help='List available backups')
     parser.add_argument('--backup-dir', default='backups', help='Base backup directory (default: backups)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
 
     args = parser.parse_args()
 

@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-from shared import PROTECTED_PATTERNS, MAX_FILE_SIZE_BYTES, is_protected_file
+from shared import PROTECTED_PATTERNS, MAX_FILE_SIZE_BYTES, is_protected_file, __version__
 
 try:
     import jsonschema
@@ -325,7 +325,7 @@ def validate_legacy_format(config: dict, errors: List[str]) -> Tuple[bool, List[
             continue
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
                 file_content = f.read()
         except UnicodeDecodeError:
             errors.append(f"File {i}: File appears to be binary or non-UTF-8: {file_path}")
@@ -414,7 +414,7 @@ def validate_modern_format(config: dict, errors: List[str]) -> Tuple[bool, List[
             continue
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
                 file_content = f.read()
         except UnicodeDecodeError:
             errors.append(f"Operation {i} (code_edit): File appears to be binary or non-UTF-8: {file_path}")
@@ -607,6 +607,7 @@ Safety Guards (29 total):
     )
     parser.add_argument('config', help='Path to JSON operations config file')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     args = parser.parse_args()
 
     if args.verbose:

@@ -24,13 +24,15 @@ import json
 import logging
 import os
 import re
+import signal
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from shared import PROTECTED_PATTERNS, is_protected_file
+from shared import PROTECTED_PATTERNS, MAX_FILE_SIZE_BYTES, is_protected_file, __version__
 
 try:
     import fcntl
@@ -42,6 +44,36 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 LOCK_FILE = ".codemanifest.lock"
+
+# Global transaction reference for signal handler rollback
+_active_txn: Optional['OperationTransaction'] = None
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGINT/SIGTERM: rollback active transaction and exit."""
+    sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+    print(f"\n  Interrupted by {sig_name}")
+    if _active_txn is not None:
+        _active_txn.rollback()
+    sys.exit(130 if signum == signal.SIGINT else 143)
+
+
+def atomic_write(file_path: Path, content: str, encoding: str = 'utf-8'):
+    """Write content to file atomically via temp file + rename."""
+    dir_path = file_path.parent
+    fd, tmp_path = tempfile.mkstemp(dir=str(dir_path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding=encoding) as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, str(file_path))
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 class ExecutionLock:
@@ -57,7 +89,7 @@ class ExecutionLock:
 
     def acquire(self) -> bool:
         try:
-            self._fd = os.open(self.lock_path, os.O_CREAT | os.O_WRONLY)
+            self._fd = os.open(self.lock_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
             if _HAS_FCNTL:
                 fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.write(self._fd, f"{os.getpid()}\n".encode())
@@ -253,7 +285,7 @@ def execute_file_create(operation: dict, backup_dir: Path, dry_run: bool) -> Tup
 
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding='utf-8')
+        atomic_write(file_path, content)
         print(f"  Created: {file_path}")
         print(f"  Size: {byte_size} bytes, Lines: {content.count(chr(10)) + 1}")
         return True, "created"
@@ -323,6 +355,15 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
         print(f"  File not found: {file_path}")
         return False, "file-not-found"
 
+    # File size guard (matches validator GUARD 27)
+    try:
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE_BYTES:
+            print(f"  BLOCKED: File too large ({file_size} bytes, max {MAX_FILE_SIZE_BYTES}): {file_path}")
+            return False, "file-too-large"
+    except OSError:
+        pass
+
     # Backup original (preserve directory structure)
     if not dry_run:
         try:
@@ -337,7 +378,7 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
             return False, str(e)
 
     try:
-        content = file_path.read_text(encoding='utf-8')
+        content = file_path.read_text(encoding='utf-8-sig')
     except UnicodeDecodeError:
         print(f"  Error: File appears to be binary or non-UTF-8: {file_path}")
         return False, "binary-or-non-utf8"
@@ -409,7 +450,7 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
         return True, "dry-run"
     else:
         try:
-            file_path.write_text(modified_content, encoding='utf-8')
+            atomic_write(file_path, modified_content)
             print(f"  Written {byte_size} bytes, {edits_applied}/{len(edits)} edits applied")
             if edits_applied < len(edits):
                 return False, "partial-edits"
@@ -495,7 +536,9 @@ def _execute_operations(config: dict, operations: list, plan_name: str,
         print()
 
     # Execute operations with transaction tracking
+    global _active_txn
     txn = OperationTransaction(backup_dir)
+    _active_txn = txn
     success_count = 0
     error_count = 0
     stats = {'file_create': 0, 'file_delete': 0, 'code_edit': 0}
@@ -552,6 +595,7 @@ def _execute_operations(config: dict, operations: list, plan_name: str,
         print(f"Backups:    {backup_dir}")
     print("-" * 50)
 
+    _active_txn = None  # noqa: F841 — clear global ref
     return error_count == 0
 
 
@@ -586,10 +630,14 @@ Safety:
     parser.add_argument('config', help='Path to JSON operations config file')
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without applying them')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable debug logging')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     args = parser.parse_args()
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, force=True)
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
     success = execute_json_config(args.config, dry_run=args.dry_run)
     sys.exit(0 if success else 1)
