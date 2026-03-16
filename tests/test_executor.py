@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import pytest
 
 # Add scripts directory to path
@@ -356,3 +357,158 @@ class TestRollbackOnFailure:
         result = executor.execute_json_config(str(config_path), dry_run=False)
         assert result is False
         assert not new_file.exists()
+
+
+class TestDiffPreview:
+    """Diff preview during dry-run."""
+
+    def test_dry_run_shows_diff(self, tmp_project, capsys):
+        """Dry run should show unified diff for code edits."""
+        sample = tmp_project / "app.py"
+        sample.write_text('VERSION = "1.0.0"\n')
+
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {
+                    "path": str(sample),
+                    "edits": [{"find": 'VERSION = "1.0.0"', "replace": 'VERSION = "2.0.0"'}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is True
+        captured = capsys.readouterr()
+        assert "--- Diff preview ---" in captured.out
+        assert '-VERSION = "1.0.0"' in captured.out
+        assert '+VERSION = "2.0.0"' in captured.out
+
+    def test_no_diff_when_no_changes(self, tmp_project, capsys):
+        """No diff shown when edits don't change content (edge case)."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "replace": "x = 1"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=True)
+        assert result is True
+        captured = capsys.readouterr()
+        assert "--- Diff preview ---" not in captured.out
+
+
+class TestExecutionLock:
+    """Execution lock prevents concurrent runs."""
+
+    def test_lock_acquired_and_released(self, tmp_project):
+        """Lock should be acquired during execution and released after."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "replace": "x = 2"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        result = executor.execute_json_config(str(config_path), dry_run=False)
+        assert result is True
+        # Lock file should be cleaned up
+        assert not os.path.exists(tmp_project / ".codemanifest.lock")
+
+    def test_concurrent_execution_blocked(self, tmp_project):
+        """Second executor should fail when lock is held."""
+        lock = executor.ExecutionLock()
+        assert lock.acquire() is True
+
+        try:
+            lock2 = executor.ExecutionLock()
+            assert lock2.acquire() is False
+        finally:
+            lock.release()
+
+    def test_dry_run_skips_lock(self, tmp_project):
+        """Dry run should not acquire lock."""
+        sample = tmp_project / "app.py"
+        sample.write_text('x = 1\n')
+
+        config = {
+            "plan": "test-plan",
+            "files": [
+                {
+                    "path": str(sample),
+                    "edits": [{"find": "x = 1", "replace": "x = 2"}],
+                }
+            ],
+        }
+        config_path = tmp_project / "ops.json"
+        config_path.write_text(json.dumps(config))
+
+        # Hold a lock — dry run should still work
+        lock = executor.ExecutionLock()
+        assert lock.acquire() is True
+        try:
+            result = executor.execute_json_config(str(config_path), dry_run=True)
+            assert result is True
+        finally:
+            lock.release()
+
+
+class TestOperationTransaction:
+    """Transaction tracks and rolls back operations."""
+
+    def test_transaction_rollback_restores(self, tmp_project):
+        """Transaction rollback should restore modified files."""
+        from pathlib import Path
+
+        backup_dir = tmp_project / "backups" / "test"
+        backup_dir.mkdir(parents=True)
+
+        # Create a file and its backup
+        original = tmp_project / "file.py"
+        original.write_text("original content")
+        backup_file = backup_dir / "file.py"
+        backup_file.write_text("original content")
+
+        # Modify the file
+        original.write_text("modified content")
+
+        txn = executor.OperationTransaction(backup_dir)
+        txn.record_modified(str(original))
+
+        txn.rollback()
+        assert original.read_text() == "original content"
+
+    def test_transaction_rollback_removes_created(self, tmp_project):
+        """Transaction rollback should remove created files."""
+        from pathlib import Path
+
+        backup_dir = tmp_project / "backups" / "test"
+        backup_dir.mkdir(parents=True)
+
+        created = tmp_project / "new.py"
+        created.write_text("new content")
+
+        txn = executor.OperationTransaction(backup_dir)
+        txn.record_created(str(created))
+
+        txn.rollback()
+        assert not created.exists()

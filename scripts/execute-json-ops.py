@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-execute-json-ops.py - Execute JSON operations config (v2.3)
+execute-json-ops.py - Execute JSON operations config (v3.0)
 
 Purpose: Execute file create, delete, and code edit operations
 Usage: python3 scripts/execute-json-ops.py path/to/ops.json [--dry-run]
@@ -13,11 +13,14 @@ Features:
   - Auto-detects format and normalizes to modern format internally
   - Automatic backup before all operations (including deleted files)
   - Backup manifest generation (compatible with restore-backup.py)
-  - Dry-run mode for previewing changes without applying them
-  - Automatic rollback on failure (restores from backup)
+  - Dry-run mode with diff preview for code edits
+  - Transactional execution with automatic rollback on failure
+  - Execution lock to prevent concurrent runs
 """
 
 import argparse
+import difflib
+import fcntl
 import fnmatch
 import json
 import logging
@@ -27,10 +30,100 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+LOCK_FILE = ".codemanifest.lock"
+
+
+class ExecutionLock:
+    """File-based lock to prevent concurrent executor runs."""
+
+    def __init__(self, lock_path: str = LOCK_FILE):
+        self.lock_path = lock_path
+        self._fd: Optional[int] = None
+
+    def acquire(self) -> bool:
+        try:
+            self._fd = os.open(self.lock_path, os.O_CREAT | os.O_WRONLY)
+            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.write(self._fd, f"{os.getpid()}\n".encode())
+            return True
+        except (OSError, IOError):
+            if self._fd is not None:
+                os.close(self._fd)
+                self._fd = None
+            return False
+
+    def release(self):
+        if self._fd is not None:
+            try:
+                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                os.close(self._fd)
+            except (OSError, IOError):
+                pass
+            self._fd = None
+            try:
+                os.unlink(self.lock_path)
+            except OSError:
+                pass
+
+    def __enter__(self):
+        if not self.acquire():
+            raise RuntimeError(
+                f"Another CodeManifest executor is running (lock: {self.lock_path}).\n"
+                "Wait for it to finish or remove the lock file if stale."
+            )
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+        return False
+
+
+class OperationTransaction:
+    """Track executed operations for transactional rollback."""
+
+    def __init__(self, backup_dir: Path):
+        self.backup_dir = backup_dir
+        self._modified_files: List[str] = []
+        self._created_files: List[str] = []
+
+    def record_modified(self, file_path: str):
+        self._modified_files.append(file_path)
+
+    def record_created(self, file_path: str):
+        self._created_files.append(file_path)
+
+    def rollback(self):
+        print("\n  ROLLBACK: Restoring files from backup...")
+        for fp in self._modified_files:
+            rel = Path(os.path.relpath(fp))
+            bp = self.backup_dir / rel
+            if bp.exists():
+                try:
+                    shutil.copy(str(bp), fp)
+                    print(f"  Restored: {fp}")
+                except Exception as e:
+                    print(f"  Warning: Failed to restore {fp}: {e}")
+        for fp in self._created_files:
+            if os.path.exists(fp):
+                try:
+                    os.unlink(fp)
+                    print(f"  Removed: {fp}")
+                except Exception as e:
+                    print(f"  Warning: Failed to remove {fp}: {e}")
+        print("  ROLLBACK COMPLETE")
+
+    @property
+    def modified_files(self) -> List[str]:
+        return list(self._modified_files)
+
+    @property
+    def created_files(self) -> List[str]:
+        return list(self._created_files)
 
 # Protected file patterns (cannot be deleted via ops config)
 PROTECTED_PATTERNS = [
@@ -133,6 +226,25 @@ def create_manifest(backup_dir: Path, plan_name: str, files_to_backup: List[str]
         print(f"  Error: Could not create manifest: {e}")
         print("  Aborting execution — backup manifest is required for safe recovery.")
         return False
+
+
+def show_diff(file_path: str, original: str, modified: str):
+    """Show unified diff between original and modified content."""
+    original_lines = original.splitlines(keepends=True)
+    modified_lines = modified.splitlines(keepends=True)
+    diff = difflib.unified_diff(
+        original_lines, modified_lines,
+        fromfile=f"a/{file_path}", tofile=f"b/{file_path}",
+        lineterm=''
+    )
+    diff_lines = list(diff)
+    if diff_lines:
+        print("  --- Diff preview ---")
+        for line in diff_lines[:50]:
+            print(f"  {line.rstrip()}")
+        if len(diff_lines) > 50:
+            print(f"  ... ({len(diff_lines) - 50} more lines)")
+        print("  --- End diff ---")
 
 
 def execute_file_create(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple[bool, str]:
@@ -298,6 +410,8 @@ def execute_code_edit(operation: dict, backup_dir: Path, dry_run: bool) -> Tuple
 
     if dry_run:
         print(f"  [DRY RUN] Would write {byte_size} bytes to: {file_path}")
+        if content != modified_content:
+            show_diff(str(file_path), content, modified_content)
         return True, "dry-run"
     else:
         try:
@@ -343,6 +457,25 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
     else:
         print()
 
+    # Acquire execution lock (non-dry-run only)
+    lock = None
+    if not dry_run:
+        lock = ExecutionLock()
+        if not lock.acquire():
+            print("Error: Another CodeManifest executor is running.")
+            print(f"If this is stale, remove {LOCK_FILE}")
+            return False
+
+    try:
+        return _execute_operations(config, operations, plan_name, config_format, dry_run)
+    finally:
+        if lock:
+            lock.release()
+
+
+def _execute_operations(config: dict, operations: list, plan_name: str,
+                        config_format: str, dry_run: bool) -> bool:
+    """Internal execution logic, called with lock held."""
     # Create backup directory (sanitize plan name for safe filesystem path)
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     safe_plan_name = re.sub(r'[^a-zA-Z0-9_-]', '_', plan_name)
@@ -369,12 +502,11 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
             return False
         print()
 
-    # Execute operations
+    # Execute operations with transaction tracking
+    txn = OperationTransaction(backup_dir)
     success_count = 0
     error_count = 0
     stats = {'file_create': 0, 'file_delete': 0, 'code_edit': 0}
-    files_modified: List[str] = []
-    files_created: List[str] = []
 
     for i, operation in enumerate(operations, 1):
         op_type = operation.get('type', 'unknown')
@@ -387,19 +519,19 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
             if success:
                 stats['file_create'] += 1
                 if status == "created":
-                    files_created.append(str(file_path))
+                    txn.record_created(str(file_path))
         elif op_type == 'file_delete':
             success, status = execute_file_delete(operation, backup_dir, dry_run)
             if success:
                 stats['file_delete'] += 1
                 if status == "deleted":
-                    files_modified.append(str(file_path))
+                    txn.record_modified(str(file_path))
         elif op_type == 'code_edit':
             success, status = execute_code_edit(operation, backup_dir, dry_run)
             if success:
                 stats['code_edit'] += 1
                 if status == "edited":
-                    files_modified.append(str(file_path))
+                    txn.record_modified(str(file_path))
         else:
             print(f"  Unknown operation type: {op_type}")
             success = False
@@ -408,20 +540,8 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
             success_count += 1
         else:
             error_count += 1
-            # Rollback on failure (only when actually modifying files)
             if not dry_run:
-                print("\n  ROLLBACK: Restoring files from backup...")
-                for fp in files_modified:
-                    rel = Path(os.path.relpath(fp))
-                    bp = backup_dir / rel
-                    if bp.exists():
-                        shutil.copy(str(bp), fp)
-                        print(f"  Restored: {fp}")
-                for fp in files_created:
-                    if os.path.exists(fp):
-                        os.unlink(fp)
-                        print(f"  Removed: {fp}")
-                print("  ROLLBACK COMPLETE")
+                txn.rollback()
             break
 
         print()
@@ -446,7 +566,7 @@ def execute_json_config(config_file: str, dry_run: bool = False) -> bool:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='Execute JSON operations config (v2.3)',
+        description='Execute JSON operations config (v3.0)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Workflow (always validate first):
