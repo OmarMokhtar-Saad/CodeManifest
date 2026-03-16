@@ -20,40 +20,32 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
-        run: |
-          pip install pytest coverage jsonschema ruff
+        run: pip install -r requirements-dev.txt
 
       - name: Lint with ruff
         run: ruff check scripts/ tests/
 
-      - name: Validate example 01
-        run: python3 scripts/validate-config-json.py examples/01-simple-edit.json
+      - name: Validate all examples
+        run: |
+          for f in examples/*.json; do
+            python3 scripts/validate-config-json.py "$f"
+          done
 
-      - name: Validate example 02
-        run: python3 scripts/validate-config-json.py examples/02-multi-file-edit.json
-
-      - name: Validate example 03
-        run: python3 scripts/validate-config-json.py examples/03-file-operations.json
-
-      - name: Dry-run example 01
-        run: python3 scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
-
-      - name: Dry-run example 02
-        run: python3 scripts/execute-json-ops.py examples/02-multi-file-edit.json --dry-run
-
-      - name: Validate example 04
-        run: python3 scripts/validate-config-json.py examples/04-modern-code-edit.json
-
-      - name: Dry-run example 03
-        run: python3 scripts/execute-json-ops.py examples/03-file-operations.json --dry-run
-
-      - name: Dry-run example 04
-        run: python3 scripts/execute-json-ops.py examples/04-modern-code-edit.json --dry-run
+      - name: Dry-run all examples
+        run: |
+          for f in examples/*.json; do
+            python3 scripts/execute-json-ops.py "$f" --dry-run
+          done
 
       - name: Restore script smoke test
         run: python3 scripts/restore-backup.py --list
+
+      - name: Version check
+        run: python3 scripts/execute-json-ops.py --version
 
       - name: Run tests with coverage
         run: coverage run -m pytest tests/ -v

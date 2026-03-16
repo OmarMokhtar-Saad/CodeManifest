@@ -1,6 +1,7 @@
 """Shared constants and utilities for CodeManifest scripts."""
 
 __version__ = "3.1.0"
+__all__ = ["__version__", "PROTECTED_PATTERNS", "MAX_FILE_SIZE_BYTES", "is_protected_file"]
 
 import fnmatch
 import os
