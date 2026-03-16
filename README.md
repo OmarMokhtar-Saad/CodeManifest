@@ -20,13 +20,12 @@ A Python script executes those changes deterministically — with automatic back
 - [How It Works](#how-it-works)
 - [Token Savings](#token-savings)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Ready-to-Paste Setup Prompts](#ready-to-paste-setup-prompts)
+- [Use in Your Project](#use-in-your-project)
+- [Quick Start (Try the Examples)](#quick-start-try-the-examples)
 - [The ops.json Format](#the-opsjson-format)
 - [Scripts Reference](#scripts-reference)
 - [Recommended Workflow](#recommended-workflow)
-- [Integration Guide](#integration-guide)
-- [Adopting in Your Project — Summary](#adopting-in-your-project--summary)
+- [Integration Guide (Detailed)](#integration-guide-detailed)
 - [Why This Works Beyond Cost](#why-this-works-beyond-cost)
 - [Requirements](#requirements)
 - [Project Structure](#project-structure)
@@ -125,11 +124,78 @@ No pip install required for core functionality — everything runs on Python's s
 
 ---
 
-## Quick Start
+## Use in Your Project
+
+### Option A: One-prompt setup (recommended)
+
+Paste one of these prompts into your AI tool. It downloads the scripts, creates the right config files, and runs a verification test — all automatically.
+
+| Your AI Tool | Prompt to paste | What it does |
+|---|---|---|
+| **Claude Code** | [setup-claude-code.md](prompts/setup-claude-code.md) | Downloads scripts + creates 3 skills + CLAUDE.md, runs integration test |
+| **Cursor** | [setup-cursor.md](prompts/setup-cursor.md) | Downloads scripts + creates `.cursor/rules/` config, runs integration test |
+| **GitHub Copilot** | [setup-copilot.md](prompts/setup-copilot.md) | Downloads scripts + creates `copilot-instructions.md`, runs integration test |
+| **ChatGPT / GPT-4** | [setup-chatgpt.md](prompts/setup-chatgpt.md) | System prompt that teaches ChatGPT to produce ops.json |
+| **Any AI tool** | [setup-universal.md](prompts/setup-universal.md) | Auto-detects your tool and sets up accordingly |
+
+Each prompt is self-contained — it uses `curl` to download the scripts directly from GitHub, so you don't need to clone this repo into your project.
+
+Already set up? Paste [integration-test.md](prompts/integration-test.md) to verify everything works.
+
+### Option B: Manual setup (3 steps)
+
+**Step 1 — Copy the scripts into your project:**
 
 ```bash
+# Download scripts (no need to clone the whole repo)
+mkdir -p scripts
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/validate-config-json.py -o scripts/validate-config-json.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/execute-json-ops.py -o scripts/execute-json-ops.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/restore-backup.py -o scripts/restore-backup.py
+curl -sL https://raw.githubusercontent.com/OmarMokhtar-Saad/CodeManifest/main/scripts/operations-schema.json -o scripts/operations-schema.json
+```
 
-# Try the examples (they run against real files in examples/sample/)
+**Step 2 — Tell your AI to use ops.json instead of editing files directly.**
+
+Add this to your AI tool's instruction file (CLAUDE.md, `.cursor/rules/`, `.github/copilot-instructions.md`, or system prompt):
+
+```
+All code changes must use the ops.json pattern. Do not edit files directly.
+
+Workflow:
+1. Read every target file first
+2. Create ops.json: {"plan": "name", "operations": [{"type": "code_edit", "path": "file", "edits": [{"find": "exact text", "replace": "new text"}]}]}
+3. Validate: python3 scripts/validate-config-json.py ops.json
+4. Dry-run:  python3 scripts/execute-json-ops.py ops.json --dry-run
+5. Execute:  python3 scripts/execute-json-ops.py ops.json
+```
+
+**Step 3 — Use it:**
+
+```bash
+# AI creates ops.json, then you run:
+python3 scripts/validate-config-json.py operations/my-plan/ops.json   # Must say APPROVED
+python3 scripts/execute-json-ops.py operations/my-plan/ops.json --dry-run  # Preview
+python3 scripts/execute-json-ops.py operations/my-plan/ops.json            # Apply
+
+# If anything went wrong:
+python3 scripts/restore-backup.py --list
+python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
+```
+
+That's it. See [Integration Guide (Detailed)](#integration-guide-detailed) below for tool-specific setup with skills, slash commands, and configuration.
+
+---
+
+## Quick Start (Try the Examples)
+
+Want to see it in action before adding it to your project? Run the included examples:
+
+```bash
+git clone https://github.com/OmarMokhtar-Saad/CodeManifest.git
+cd CodeManifest
+
+# Validate → dry-run → execute
 python3 scripts/validate-config-json.py examples/01-simple-edit.json
 python3 scripts/execute-json-ops.py examples/01-simple-edit.json --dry-run
 python3 scripts/execute-json-ops.py examples/01-simple-edit.json
@@ -138,7 +204,7 @@ python3 scripts/execute-json-ops.py examples/01-simple-edit.json
 python3 -m pytest tests/ -v
 ```
 
-Expected output after execution:
+Expected output:
 
 ```
 Plan: simple-edit-example
@@ -160,22 +226,6 @@ Successful: 1
 Errors:     0
 --------------------------------------------------
 ```
-
----
-
-## Ready-to-Paste Setup Prompts
-
-Skip the docs. Paste a prompt. Your AI sets up everything.
-
-| Your AI Tool | Prompt | What it does |
-|---|---|---|
-| Claude Code | [setup-claude-code.md](prompts/setup-claude-code.md) | Copies scripts + skills + CLAUDE.md, runs test |
-| Cursor | [setup-cursor.md](prompts/setup-cursor.md) | Copies scripts + creates .cursor rule, runs test |
-| GitHub Copilot | [setup-copilot.md](prompts/setup-copilot.md) | Copies scripts + creates copilot-instructions, runs test |
-| ChatGPT / GPT-4 | [setup-chatgpt.md](prompts/setup-chatgpt.md) | System prompt for ops.json generation |
-| Any AI tool | [setup-universal.md](prompts/setup-universal.md) | Auto-detects tool, sets up accordingly |
-
-Already set up? Paste [integration-test.md](prompts/integration-test.md) to verify.
 
 ---
 
@@ -344,7 +394,7 @@ python3 scripts/restore-backup.py --backup backups/my-plan-<timestamp>
 
 ---
 
-## Integration Guide
+## Integration Guide (Detailed)
 
 ### What you're copying
 
@@ -578,32 +628,6 @@ python3 scripts/validate-config-json.py ops.json
 # 3. Execute
 python3 scripts/execute-json-ops.py ops.json --dry-run
 python3 scripts/execute-json-ops.py ops.json
-```
-
----
-
-## Adopting in Your Project — Summary
-
-| Your AI tool | What to copy | What to configure |
-|---|---|---|
-| **Claude Code** | `scripts/` + `.claude/` + `CLAUDE.md` | Edit CLAUDE.md with project name and test command |
-| **Cursor** | `scripts/` | Create `.cursor/rules/ops-config.mdc` |
-| **GitHub Copilot** | `scripts/` | Create `.github/copilot-instructions.md` |
-| **ChatGPT / GPT-4** | `scripts/` | Add to Custom Instructions or system prompt |
-| **Gemini** | `scripts/` | Add to system instructions |
-| **Other AI tools** | `scripts/` | Add to your tool's instruction file |
-| **No AI** | `scripts/` | Nothing — write ops.json manually |
-
-**Optional for all:** Add protected files for your stack in `scripts/validate-config-json.py` → `PROTECTED_PATTERNS`:
-
-```python
-# Already included: .gitignore, *.md, Makefile, Dockerfile, requirements.txt,
-#   package.json, package-lock.json, yarn.lock, pyproject.toml, setup.py,
-#   setup.cfg, Pipfile, Pipfile.lock, tsconfig.json
-# Add for your stack:
-#   Java:  "build.gradle.kts", "settings.gradle.kts", "gradlew", "pom.xml"
-#   iOS:   "Podfile", "Podfile.lock"
-#   CI/CD: ".github/workflows/*.yml", ".gitlab-ci.yml"
 ```
 
 ---
